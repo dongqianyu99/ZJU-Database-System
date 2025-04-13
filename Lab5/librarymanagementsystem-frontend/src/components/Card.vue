@@ -28,12 +28,8 @@
 
                     <!-- 卡片操作 -->
                     <div style="margin-top: 10px;">
-                        <el-button type="primary" :icon="Edit" @click="this.toModifyInfo.id = card.id, this.toModifyInfo.name = card.name,
-                this.toModifyInfo.department = card.department, this.toModifyInfo.type = card.type,
-                this.modifyCardVisible = true" circle />
-                        <el-button type="danger" :icon="Delete" circle
-                            @click="this.toRemove = card.id, this.removeCardVisible = true"
-                            style="margin-left: 30px;" />
+                        <el-button type="primary" :icon="Edit" @click="this.toModifyInfo.id = card.id, this.toModifyInfo.name = card.name, this.toModifyInfo.department = card.department, this.toModifyInfo.type = card.type, this.modifyCardVisible = true" circle />
+                        <el-button type="danger" :icon="Delete" circle @click="this.toRemove = card.id, this.removeCardVisible = true" style="margin-left: 30px;" />
                     </div>
 
                 </div>
@@ -41,7 +37,7 @@
 
             <!-- 新建借书证卡片 -->
             <el-button class="newCardBox"
-                @click="newCardInfo.name = '', newCardInfo.department = '', newCardInfo.type = '学生', newCardVisible = true">
+                @click="newCardInfo.name = '', newCardInfo.department = '', newCardInfo.type = 'Student', newCardVisible = true">
                 <el-icon style="height: 50px; width: 50px;">
                     <Plus style="height: 100%; width: 100%;" />
                 </el-icon>
@@ -147,12 +143,12 @@ export default {
             toSearch: '', // 搜索内容
             types: [ // 借书证类型
                 {
-                    value: '教师',
-                    label: '教师',
+                    value: 'Teacher',
+                    label: 'Teacher',
                 },
                 {
-                    value: '学生',
-                    label: '学生',
+                    value: 'Student',
+                    label: 'Student',
                 }
             ],
             newCardVisible: false, // 新建借书证对话框可见性
@@ -161,14 +157,14 @@ export default {
             newCardInfo: { // 待新建借书证信息
                 name: '',
                 department: '',
-                type: '学生'
+                type: 'Student'
             },
             modifyCardVisible: false, // 修改信息对话框可见性
             toModifyInfo: { // 待修改借书证信息
                 id: 0,
                 name: '',
                 department: '',
-                type: '学生'
+                type: 'Student'
             },
         }
     },
@@ -179,7 +175,8 @@ export default {
                 { // 请求体
                     name: this.newCardInfo.name,
                     department: this.newCardInfo.department,
-                    type: this.newCardInfo.type
+                    type: this.newCardInfo.type,
+                    op: "new"
                 })
                 .then(response => {
                     ElMessage.success("借书证新建成功") // 显示消息提醒
@@ -191,7 +188,17 @@ export default {
             // TODO: YOUR CODE HERE
         },
         ConfirmRemoveCard() {
-            // TODO: YOUR CODE HERE
+            // 发出POST请求
+            axios.post("/card",
+                { // 请求体
+                    id: this.toRemove,
+                    op: "remove"
+                })
+                .then(response => {
+                    ElMessage.success("借书证移除成功") // 显示消息提醒
+                    this.removeCardVisible = false // 将对话框设置为不可见
+                    this.QueryCards() // 重新查询借书证以刷新页面
+                })
         },
         QueryCards() {
             this.cards = [] // 清空列表

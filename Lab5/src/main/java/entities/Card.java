@@ -3,6 +3,8 @@ package entities;
 import java.util.Objects;
 import java.util.Random;
 
+import com.google.gson.annotations.SerializedName;
+
 public final class Card {
 
     public enum CardType {
@@ -34,6 +36,7 @@ public final class Card {
         }
     };
 
+    @SerializedName("id") // 告诉 Gson 把 cardId 这个字段序列化成 id
     private int cardId;
     private String name;
     private String department;
@@ -42,8 +45,10 @@ public final class Card {
     /* we assume that two cards are equal iff their name...type are equal */
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         Card card = (Card) o;
         return name.equals(card.name) &&
                 department.equals(card.department) &&

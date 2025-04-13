@@ -24,7 +24,7 @@ public final class ConnectConfig {
         }
         // BufferedReader br = new BufferedReader(new FileReader(res.getPath()));
         BufferedReader br = new BufferedReader(new FileReader(
-                "/Users/dongqianyu/Documents/2025-Spring & Summer/Database System/Lab/Labs/lab5/librarymanagementsystem/src/main/resources/application.yaml"));
+                "/Users/dongqianyu/Documents/2025-Spring & Summer/Database System/Lab/Labs/ZJU-Database-System/Lab5/src/main/resources/application.yaml"));
         Yaml yaml = new Yaml();
         Map<String, Object> objectMap = yaml.load(br);
         /* initialize all configures */

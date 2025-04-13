@@ -11,9 +11,11 @@ queries/ApiResult.class
 utils/MysqlInitializer.class
 entities/Card.class
 utils/SqlServerInitializer.class
+Main$CardHandler.class
 queries/BorrowHistories.class
 utils/RandomData.class
 LibraryManagementSystem.class
+Main$CardHandler$CardRequest.class
 queries/BookQueryConditions.class
 queries/CardList.class
 utils/DatabaseType.class
