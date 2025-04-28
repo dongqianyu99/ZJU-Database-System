@@ -27,16 +27,36 @@ class LRUReplacer : public Replacer {
    */
   ~LRUReplacer() override;
 
+  /**
+   * Remove the least recently used page, return the page id in Page in Buffer Pool.
+   */
   bool Victim(frame_id_t *frame_id) override;
 
+  /**
+   * Can't be removed when pinned <==> removed from lru_list_.
+   */
   void Pin(frame_id_t frame_id) override;
 
+  /**
+   * Unpinned.
+   */
   void Unpin(frame_id_t frame_id) override;
 
+  /**
+   * Return the number of pages that can be removed.
+   */
   size_t Size() override;
 
 private:
   // add your own private member variables here
+  /**
+   * The most recently used page is linked at the end, while the least recently used page is linked at the head.
+   */
+  std::list<frame_id_t> lru_list_; 
+  /**
+   * Hash table to rapidly judge wheter a frame_id is in lru_list_.
+   */
+  std::unordered_set<frame_id_t> lru_set_;
 };
 
 #endif  // MINISQL_LRU_REPLACER_H
