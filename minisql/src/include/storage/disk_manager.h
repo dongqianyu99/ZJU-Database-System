@@ -69,7 +69,7 @@ class DiskManager {
    */
   char *GetMetaData() { return meta_data_; }
 
-  static constexpr size_t BITMAP_SIZE = BitmapPage<PAGE_SIZE>::GetMaxSupportedSize();
+  static constexpr size_t BITMAP_SIZE = BitmapPage<PAGE_SIZE>::GetMaxSupportedSize(); // bits
 
  private:
   /**
@@ -100,6 +100,11 @@ class DiskManager {
   std::recursive_mutex db_io_latch_;
   bool closed{false};
   char meta_data_[PAGE_SIZE];
+  /**
+   * PAGE_SIZE = 4096 Byte
+   *           = 8 * 4096 bits
+   *           = 4 Bytes + 4 Bytes + 4088 Bytes
+   */
 };
 
 #endif

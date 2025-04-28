@@ -50,9 +50,41 @@ void DiskManager::WritePage(page_id_t logical_page_id, const char *page_data) {
 /**
  * TODO: Student Implement
  */
-page_id_t DiskManager::AllocatePage() {
-  ASSERT(false, "Not implemented yet.");
-  return INVALID_PAGE_ID;
+page_id_t DiskManager::AllocatePage() { // return logical page id
+    DiskFileMetaPage *metaPage = reinterpret_cast<DiskFileMetaPage *>(meta_data_); // read as `DiskFileMetaPage`
+    uint32_t allocatePages = metaPage->GetAllocatedPages();
+    uint32_t extentNums = metaPage->GetExtentNums();
+    if (allocatePages >= MAX_VALID_PAGE_ID) // no space left
+        return INVALID_PAGE_ID;
+    
+    // find availabel extent
+    uint32_t extentID;
+    for (extentID = 0; extentID < extentNums; extentID++) {
+        if (metaPage->GetExtentUsedPage(extentID) < BITMAP_SIZE) {
+            break;
+        }
+    }
+
+    // get physical page id of the extent meta page
+    page_id_t physicalPageId = 1 // disk meta page
+                               + (1 + BITMAP_SIZE) // extent = extent meta page + extent pages
+                               * extentID;
+
+    // modify extent meta page
+    char *buffer = new char[PAGE_SIZE];
+    ReadPhysicalPage(physicalPageId, buffer);
+    BitmapPage<PAGE_SIZE> *extentMetaPage = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(buffer);
+    uint32_t page_offset = 0;
+    extentMetaPage->AllocatePage(page_offset);
+    WritePhysicalPage(physicalPageId, buffer);
+    delete[] buffer;
+    metaPage->num_allocated_pages_++;
+    metaPage->extent_used_page_[extentID]++;
+    if (extentID >= extentNums) 
+        metaPage->num_extents_++;
+    
+    return extentID * BITMAP_SIZE + page_offset;
+
 }
 
 /**
@@ -70,10 +102,10 @@ bool DiskManager::IsPageFree(page_id_t logical_page_id) {
 }
 
 /**
- * TODO: Student Implement
+ * Finished
  */
-page_id_t DiskManager::MapPageId(page_id_t logical_page_id) {
-  return 0;
+page_id_t DiskManager::MapPageId(page_id_t logical_page_id) { // logical page id --> physical page id
+    return (logical_page_id + 1 + logical_page_id / BITMAP_SIZE);
 }
 
 int DiskManager::GetFileSize(const std::string &file_name) {
