@@ -48,7 +48,7 @@ void DiskManager::WritePage(page_id_t logical_page_id, const char *page_data) {
 }
 
 /**
- * TODO: Student Implement
+ * Finished
  */
 page_id_t DiskManager::AllocatePage() { // return logical page id
     DiskFileMetaPage *metaPage = reinterpret_cast<DiskFileMetaPage *>(meta_data_); // read as `DiskFileMetaPage`
@@ -80,7 +80,7 @@ page_id_t DiskManager::AllocatePage() { // return logical page id
     delete[] buffer;
     metaPage->num_allocated_pages_++;
     metaPage->extent_used_page_[extentID]++;
-    if (extentID >= extentNums) 
+    if (extentID >= extentNums) // extent not enough, add a new onew
         metaPage->num_extents_++;
     
     return extentID * BITMAP_SIZE + page_offset;
@@ -88,17 +88,46 @@ page_id_t DiskManager::AllocatePage() { // return logical page id
 }
 
 /**
- * TODO: Student Implement
+ * Finished
  */
 void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
-  ASSERT(false, "Not implemented yet.");
+    DiskFileMetaPage *metaPage = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+
+    // get physical page id of the extent meta page
+    uint32_t physicalPageId = 1 + logical_page_id + logical_page_id / BITMAP_SIZE - logical_page_id % BITMAP_SIZE;
+    uint32_t extentID = logical_page_id / BITMAP_SIZE;
+
+    // modify extent meta page
+    char *buffer = new char[PAGE_SIZE];
+    ReadPhysicalPage(physicalPageId, buffer);
+    BitmapPage<PAGE_SIZE> *extentMetaPage = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(buffer);
+    uint32_t page_offset = logical_page_id % BITMAP_SIZE;
+    extentMetaPage->DeAllocatePage(page_offset);
+    WritePhysicalPage(physicalPageId, buffer);
+    delete[] buffer;
+    metaPage->num_allocated_pages_--;
+    metaPage->extent_used_page_[extentID]--;
+    // metaPage->num_extent needs no modification
 }
 
 /**
- * TODO: Student Implement
+ * Finished
  */
 bool DiskManager::IsPageFree(page_id_t logical_page_id) {
-  return false;
+    if (logical_page_id > MAX_VALID_PAGE_ID)
+        return false;
+
+    DiskFileMetaPage *metaPage = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+    // get physical page id of the extent meta page
+    uint32_t physicalPageId = 1 + logical_page_id + logical_page_id / BITMAP_SIZE - logical_page_id % BITMAP_SIZE;
+    
+    char *buffer = new char[PAGE_SIZE];
+    ReadPhysicalPage(physicalPageId, buffer);
+    BitmapPage<PAGE_SIZE> *extentMetaPage = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(buffer);
+    uint32_t page_offset = logical_page_id % BITMAP_SIZE;
+    bool result = extentMetaPage->IsPageFree(page_offset);
+    delete[] buffer;
+    return result;
 }
 
 /**
