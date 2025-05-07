@@ -1,5 +1,5 @@
 #include "page/bitmap_page.h"
-
+#include <iostream>
 #include "glog/logging.h"
 
 /**
@@ -7,8 +7,17 @@
  */
 template <size_t PageSize>
 bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
-    if (page_allocated_ >= GetMaxSupportedSize() || next_free_page_ >= GetMaxSupportedSize()) // out of space or invalid 
+    if (page_allocated_ >= GetMaxSupportedSize() || next_free_page_ >= GetMaxSupportedSize()) {// out of space or invalid
+        // std::cout << "page_allocated_ = " << page_allocated_ << std::endl;
+        // std::cout << "GetMaxSupportedSize() = " << GetMaxSupportedSize() << std::endl;
+        // std::cout << "next_free_page_ = " << page_allocated_ << std::endl;
+        // std::cout << "return False!!!" << std::endl;
         return false;
+
+    }
+    // std::cout << "page_allocated_ = " << page_allocated_ << std::endl;
+    // std::cout << "GetMaxSupportedSize() = " << GetMaxSupportedSize() << std::endl;
+    // std::cout << "next_free_page_ = " << page_allocated_ << std::endl;
     page_offset = next_free_page_;
     uint32_t byte_offset = next_free_page_ / 8;
     uint8_t bit_offset = next_free_page_ % 8;

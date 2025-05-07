@@ -18,12 +18,18 @@ class BufferPoolManager {
 
   ~BufferPoolManager();
 
+  /**
+   * Fetch a page to buffer from memory/disk according to its logical page id.
+   */
   Page *FetchPage(page_id_t page_id);
 
   bool UnpinPage(page_id_t page_id, bool is_dirty);
 
   bool FlushPage(page_id_t page_id);
 
+  /**
+   * Allocate a new page.
+   */
   Page *NewPage(page_id_t &page_id);
 
   bool DeletePage(page_id_t page_id);

@@ -55,6 +55,7 @@ TEST(BufferPoolManagerTest, BinaryDataTest) {
     EXPECT_EQ(true, bpm->UnpinPage(i, true));
     EXPECT_TRUE(bpm->FlushPage(i));
   }
+  // bpm->CheckAllUnpinned();
   for (int i = 0; i < 5; ++i) {
     EXPECT_NE(nullptr, bpm->NewPage(page_id_temp));
     EXPECT_EQ(buffer_pool_size + i, page_id_temp);

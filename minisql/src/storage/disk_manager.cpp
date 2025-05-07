@@ -78,10 +78,15 @@ page_id_t DiskManager::AllocatePage() { // return logical page id
     extentMetaPage->AllocatePage(page_offset);
     WritePhysicalPage(physicalPageId, buffer);
     delete[] buffer;
+    // std::cout << "num_allocated_pages_ = " << metaPage->num_allocated_pages_ << std::endl;
     metaPage->num_allocated_pages_++;
     metaPage->extent_used_page_[extentID]++;
-    if (extentID >= extentNums) // extent not enough, add a new onew
+    if (extentID >= extentNums) // extent not enough, add a new one
         metaPage->num_extents_++;
+
+    // std::cout << "extentID = " << extentID << std::endl;
+    // std::cout << "BITMAP_SIZE = " << BITMAP_SIZE << std::endl;
+    // std::cout << "page_offset = " << page_offset << std::endl;
     
     return extentID * BITMAP_SIZE + page_offset;
 
@@ -134,7 +139,8 @@ bool DiskManager::IsPageFree(page_id_t logical_page_id) {
  * Finished
  */
 page_id_t DiskManager::MapPageId(page_id_t logical_page_id) { // logical page id --> physical page id
-    return (logical_page_id + 1 + logical_page_id / BITMAP_SIZE);
+    // [WRONG] return (logical_page_id + 1 + logical_page_id / BITMAP_SIZE);
+    return logical_page_id + (logical_page_id / BITMAP_SIZE) + 2;
 }
 
 int DiskManager::GetFileSize(const std::string &file_name) {
