@@ -40,9 +40,9 @@ Column::Column(const Column *other)
 */
 uint32_t Column::SerializeTo(char *buf) const {
     /**
-     * -----------------------------------------------------------------------------------------------------------
-     * | COLUMN_MAGIC_NUM | name_len | name_ | type_ | len_{0} | table_ind_{0} | nullable_{false} | unique_{false}
-     * -----------------------------------------------------------------------------------------------------------
+     * -------------------------------------------------------------------------------------------------------------
+     * | COLUMN_MAGIC_NUM | name_len | name_ | type_ | len_{0} | table_ind_{0} | nullable_{false} | unique_{false} |
+     * -------------------------------------------------------------------------------------------------------------
      */
   
     char *buffer_pos = buf;
@@ -100,7 +100,7 @@ uint32_t Column::DeserializeFrom(char *buf, Column *&column) {
 
     // Read COLUMN_MAGIC_NUM
     uint32_t magicNum = MACH_READ_UINT32(buffer_pos);
-    ASSERT(magicNum == Column::COLUMN_MAGIC_NUM, "COLUMN_MAGIC_NUM doesn't mach.")
+    ASSERT(magicNum == Column::COLUMN_MAGIC_NUM, "COLUMN_MAGIC_NUM doesn't mach.");
     buffer_pos += sizeof(uint32_t);
 
     // Read name_
@@ -122,9 +122,9 @@ uint32_t Column::DeserializeFrom(char *buf, Column *&column) {
     buffer_pos += sizeof(uint32_t);
 
     // Read nullable_ & unique_
-    bool nullable = static_cast<bool>(*pos);
+    bool nullable = static_cast<bool>(*buffer_pos);
     buffer_pos += sizeof(char);
-    bool unique = static_cast<bool>(*pos);
+    bool unique = static_cast<bool>(*buffer_pos);
     buffer_pos += sizeof(char);
 
     /**

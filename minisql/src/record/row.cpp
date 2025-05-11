@@ -16,7 +16,7 @@ uint32_t Row::SerializeTo(char *buf, Schema *schema) const {
      */
 
     // Write Field Nums.
-    uint32_t field_nums = schema->GetColumnCount()
+    uint32_t field_nums = schema->GetColumnCount();
     MACH_WRITE_UINT32(buffer_pos, field_nums);
     buffer_pos += sizeof(field_nums);
 
@@ -58,9 +58,9 @@ uint32_t Row::DeserializeFrom(char *buf, Schema *schema) {
     for (uint32_t i = 0; i < field_nums; i++) {
         Field *field_tmp = nullptr;
         if (bitmap[i / 8] &static_cast<char>(1 << (i % 8)))
-            buffer_pos += Field::DeserializeFrom(buffer_pos, schema->GetColumn()[i]->GetType(), &field_tmp, true);
+            buffer_pos += Field::DeserializeFrom(buffer_pos, schema->GetColumn(i)->GetType(), &field_tmp, true);
         else 
-            buffer_pos += Field::DeserializeFrom(buffer_pos, schema->GetColumn()[i]->GetType(), &field_tmp, false);
+            buffer_pos += Field::DeserializeFrom(buffer_pos, schema->GetColumn(i)->GetType(), &field_tmp, false);
         fields_.push_back(field_tmp);
     }
 
@@ -78,7 +78,7 @@ uint32_t Row::GetSerializedSize(Schema *schema) const {
     size += sizeof(uint32_t);
     size += (fields_.size() + 7) / 8;
     for (uint32_t i = 0; i < fields_.size(); i++) {
-        if (!fields_[i]->IsNull)
+        if (!fields_[i]->IsNull())
             size += fields_[i]->GetSerializedSize();
     }
 
