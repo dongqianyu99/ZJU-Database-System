@@ -3,7 +3,63 @@
 /**
  * TODO: Student Implement
  */
-bool TableHeap::InsertTuple(Row &row, Txn *txn) { return false; }
+bool TableHeap::InsertTuple(Row &row, Txn *txn) {
+    /**
+     * Use First Fit strategy, try to find the first TablePage that is able to hold the record. 
+     */
+    
+    // Make sure the tuple is not too large.
+    uint32_t tuple_size = row.GetSerializedSize(schema_);
+    ASSERT(tuple_size < PAGE_SIZE, "Tuple size is larger than PAGE_SIZE!");
+
+    // Insert the tuple using First Fit.
+    page_id_t curPageId = first_page_id_;
+    bool isInserted = false;
+    while (!isInserted) {
+        auto curPage = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(curPageId));
+        if (!curPage) {
+            throw std::runtime_error("Page ID invalid!");
+            // return false;
+        }
+        curPage->WLatch();
+        isInserted = curPage->InsertTuple(row, schema_, txn, lock_manager_, log_manager_); // Try to insert the tuple to an old page.
+        curPage->WUnlatch();
+        buffer_pool_manager_->UnpinPage(curPage->GetPageId(), isInserted);
+
+        page_id_t nextPageId = curPage->GetNextPageId();
+        if (isInserted) { break; }
+        else if (nextPageId != INVALID_PAGE_ID) { curPageId = nextPageId; }
+        else {
+            // No place for the tuple in old pages. Need to attach a new page.
+            page_id_t newPageId;
+            Page *new_page = buffer_pool_manager_->NewPage(newPageId);
+            if (new_page == nullptr) {
+                throw std::runtime_error("Can't get a new page!");
+                // return false;
+            }
+            auto newPage = reinterpret_cast<TablePage *>(new_page);
+            
+            // Initialize the new page and attach it to the last page.
+            newPage->WLatch();
+            newPage->Init(newPageId, curPageId, log_manager_, txn);
+            newPage->WUnlatch();
+            curPage->WLatch();
+            curPage->SetNextPageId(newPageId);
+            curPage->WUnlatch();
+            buffer_pool_manager_->UnpinPage(curPageId, true);
+
+            // Insert the tuple.
+            newPage->WLatch();
+            isInserted = newPage->InsertTuple(row, schema_, txn, lock_manager_, log_manager_);
+            newPage->WUnlatch();
+            buffer_pool_manager_->UnpinPage(newPageId, true);
+            
+            break;
+        }
+    }
+
+    return isInserted;
+}
 
 bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
   // Find the page which contains the tuple.

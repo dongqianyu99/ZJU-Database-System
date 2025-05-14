@@ -41,7 +41,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     
     if (page_table_.find(page_id) != page_table_.end()) { // If P exists, pin it and return it immediately.
         frame_id = page_table_[page_id];
-        replacer_->Pin(frame_id);
+        replacer_->Pin(frame_id);  // Don't forget to unpin it!
         pages_[frame_id].pin_count_++; // Recording the number of threads pinning this page.
         return &pages_[frame_id];
     }
