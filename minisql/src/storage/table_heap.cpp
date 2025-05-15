@@ -5,7 +5,8 @@
  */
 bool TableHeap::InsertTuple(Row &row, Txn *txn) {
     /**
-     * Use First Fit strategy, try to find the first TablePage that is able to hold the record. 
+     * Use First Fit strategy, try to find the first TablePage that is able to hold the record.
+     * `RowId` should be returned through `row.rid_`. (Done by TablePage::InsertTuple) 
      */
     
     // Make sure the tuple is not too large.
@@ -16,11 +17,13 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
     page_id_t curPageId = first_page_id_;
     bool isInserted = false;
     while (!isInserted) {
-        auto curPage = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(curPageId));
-        if (!curPage) {
-            throw std::runtime_error("Page ID invalid!");
-            // return false;
+        Page *cur_Page = buffer_pool_manager_->FetchPage(curPageId);
+        if (cur_Page == nullptr) {
+            // throw std::runtime_error("Page ID invalid!");
+            return false;
         }
+        auto curPage = reinterpret_cast<TablePage *>(cur_Page);
+        
         curPage->WLatch();
         isInserted = curPage->InsertTuple(row, schema_, txn, lock_manager_, log_manager_); // Try to insert the tuple to an old page.
         curPage->WUnlatch();
@@ -34,8 +37,8 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
             page_id_t newPageId;
             Page *new_page = buffer_pool_manager_->NewPage(newPageId);
             if (new_page == nullptr) {
-                throw std::runtime_error("Can't get a new page!");
-                // return false;
+                // throw std::runtime_error("Can't get a new page!");
+                return false;
             }
             auto newPage = reinterpret_cast<TablePage *>(new_page);
             
@@ -79,14 +82,61 @@ bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
 /**
  * TODO: Student Implement
  */
-bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) { return false; }
+bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
+    /**
+     * Replace old row with new row where `RowId` is equal to `rid`.
+     * `RowId` should be returned through `new_row.rid_`.
+     */
+    Page *old_Page = buffer_pool_manager_->FetchPage(rid.GetPageId());
+    if (old_Page == nullptr) {
+        // throw std::runtime_error("Old page not found!");
+        return false;
+    }
+    auto oldPage = reinterpret_cast<TablePage *>(old_Page);
+
+    // TablePage::UpdateTuple requires a old_row.
+    Row *old_row;
+    oldPage->WLatch();
+    if (!(oldPage->GetTuple(old_row, schema_, txn, lock_manager_))) {
+        // throw std::runtime_error("Can't get tuple from the old page!");
+        old_Page->WUnlatch();
+        return false;
+    }
+    // Update the tuple.
+    bool isUpdated = oldPage->UpdateTuple(row, old_row, schema_, txn, lock_manager_, log_manager_);
+    oldPage->WUnlatch();
+    if (!isUpdated) { // New row is too large to be updated. Remove the old row and insert the new row again.
+        MarkDelete(rid, txn);
+        bool isInserted = InsertTuple(row, txn);
+        if (isInserted) // `RowId` will be returned using InsertTuple.
+            RollbackDelete(rid, txn);
+        return isInserted;
+    }
+    buffer_pool_manager_->UnpinPage(oldPage->GetPageId(), isUpdated);  
+    row.SetRowId(rid);  
+    return isUpdated;
+}
 
 /**
  * TODO: Student Implement
  */
 void TableHeap::ApplyDelete(const RowId &rid, Txn *txn) {
-  // Step1: Find the page which contains the tuple.
-  // Step2: Delete the tuple from the page.
+    /**
+     * Step1: Find the page which contains the tuple.
+     * Step2: Delete the tuple from the page.
+     * */ 
+    Page *page_ = buffer_pool_manager_->FetchPage(rid.GetPageId());
+    if (page_ == nullptr) {
+        // throw std::runtime_error("Page not found!");
+        return;
+    }
+    auto page = reinterpret_cast<TablePage *>(page_);
+
+    // Apply delete.
+    page->WLatch();
+    page->ApplyDelete(rid, txn, log_manager_);
+    page->WUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
 }
 
 void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
@@ -103,7 +153,20 @@ void TableHeap::RollbackDelete(const RowId &rid, Txn *txn) {
 /**
  * TODO: Student Implement
  */
-bool TableHeap::GetTuple(Row *row, Txn *txn) { return false; }
+bool TableHeap::GetTuple(Row *row, Txn *txn) {
+    Page *page_ = buffer_pool_manager_->FetchPage(row->GetRowId().GetPageId());
+    if (page_ == nullptr) {
+        // throw std::runtime_error("Page not found!");
+        return false;
+    }
+    auto page = reinterpret_cast<TablePage *>(page_);
+
+    page->RLatch();
+    bool isGetTuple = page->GetTuple(row, schema_, txn, lock_manager_);
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false); // Unpinned here.
+    return isGetTuple;
+}
 
 void TableHeap::DeleteTable(page_id_t page_id) {
   if (page_id != INVALID_PAGE_ID) {
@@ -120,9 +183,19 @@ void TableHeap::DeleteTable(page_id_t page_id) {
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::Begin(Txn *txn) { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::Begin(Txn *txn) {
+    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
+    RowId rid;
+    page->RLatch();
+    page->GetFirstTupleRid(&rid);
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    return TableIterator(this, rid, txn);
+}
 
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::End() { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::End() { 
+    return TableIterator(nullptr, RowId(), nullptr); 
+}

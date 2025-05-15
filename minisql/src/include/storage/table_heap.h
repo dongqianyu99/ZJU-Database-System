@@ -113,7 +113,19 @@ class TableHeap {
         schema_(schema),
         log_manager_(log_manager),
         lock_manager_(lock_manager) {
-    ASSERT(false, "Not implemented yet.");
+    // ASSERT(false, "Not implemented yet.");
+
+    // Fatch a new page.
+    page_id_t newPageId;
+    buffer_pool_manager_->NewPage(newPageId);
+    auto newPage = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(newPageId));
+    
+    // Initialize and unpin and record the first page id.
+    newPage->WLatch();
+    newPage->Init(newPageId, INVALID_PAGE_ID, log_manager_, txn);
+    newPage->WUnlatch();
+    buffer_pool_manager_->UnpinPage(newPageId, true);
+    first_page_id_ = newPageId;
   };
 
   explicit TableHeap(BufferPoolManager *buffer_pool_manager, page_id_t first_page_id, Schema *schema,
