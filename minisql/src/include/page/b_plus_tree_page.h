@@ -17,6 +17,7 @@ enum class IndexPageType { INVALID_INDEX_PAGE = 0, LEAF_PAGE, INTERNAL_PAGE };
  *
  * It actually serves as a header part for each B+ tree page and
  * contains information shared by both leaf page and internal page.
+ * 
  *
  * Header format (size in byte, 28 bytes in total):
  * ----------------------------------------------------------------------------
@@ -61,11 +62,11 @@ class BPlusTreePage {
 
  private:
   // member variable, attributes that both internal and leaf page share
-  [[maybe_unused]] IndexPageType page_type_;
-  [[maybe_unused]] int key_size_;
-  [[maybe_unused]] lsn_t lsn_;
-  [[maybe_unused]] int size_;
-  [[maybe_unused]] int max_size_;
+  [[maybe_unused]] IndexPageType page_type_; // Denote whether the node is a internal node or a leaf node.
+  [[maybe_unused]] int key_size_; // The length of the current index key.
+  [[maybe_unused]] lsn_t lsn_; // The log serial number of the data page.
+  [[maybe_unused]] int size_; // The number of Key-Value pairs stored in the current node.
+  [[maybe_unused]] int max_size_; // The maximum number of Key-Value pairs that can be hold in the current node.
   [[maybe_unused]] page_id_t parent_page_id_;
   [[maybe_unused]] page_id_t page_id_;
 };
