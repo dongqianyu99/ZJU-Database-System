@@ -99,6 +99,11 @@ class TableHeap {
   TableIterator End();
 
   /**
+   * @return the next valid row id given current row id
+   */
+  RowId GetNextRowId(RowId rid, Txn *txn);
+
+  /**
    * @return the id of the first page of this table
    */
   inline page_id_t GetFirstPageId() const { return first_page_id_; }
