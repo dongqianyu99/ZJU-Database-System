@@ -38,6 +38,7 @@ private:
     TableHeap *table_heap_; // The table heap which includes this table.
     RowId rid_;
     Txn *txn_;
+    Row row_; // To avoid using `new`, which might causes memory leaks.
 };
 
 #endif  // MINISQL_TABLE_ITERATOR_H
