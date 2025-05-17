@@ -78,7 +78,7 @@ page_id_t InternalPage::Lookup(const GenericKey *key, const KeyManager &KM) {
 
     // Start the search from the second key.
     int left = 1;
-    int right = GetSize() - 1;
+    int right = cur_size - 1;
     while (left <= right ) { // Binary search.
         int mid = (left + right) / 2;
         GenericKey *mid_key = KeyAt(mid);
@@ -134,7 +134,7 @@ int InternalPage::InsertNodeAfter(const page_id_t &old_value, GenericKey *new_ke
     SetValueAt(index, new_value);
 
     // Update the size.
-    SetSize(cur_size + 1);
+    IncreaseSize(1);
 
     return GetSize();
 }
@@ -150,7 +150,8 @@ void InternalPage::MoveHalfTo(InternalPage *recipient, BufferPoolManager *buffer
     int cur_size = GetSize();
     int move_size = cur_size / 2;
     int start_index = cur_size - move_size;
-    recipient->CopyNFrom(pairs_off + start_index * pair_size, move_size, buffer_pool_manager);
+    // recipient->CopyNFrom(pairs_off + start_index * pair_size, move_size, buffer_pool_manager);
+    recipient->CopyNFrom(PairPtrAt(start_index), move_size, buffer_pool_manager);
     SetSize(cur_size - move_size);
 }
 
@@ -161,7 +162,8 @@ void InternalPage::MoveHalfTo(InternalPage *recipient, BufferPoolManager *buffer
  */
 void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool_manager) {
     int start_index = GetSize();
-    PairCopy(pairs_off + start_index * pair_size, src, size);
+    // PairCopy(pairs_off + start_index * pair_size, src, size);
+    PairCopy(PairPtrAt(start_index), src, size);
     // Update the parent id for all the children.
     for (int i = start_index; i < start_index + size; i++) {
         page_id_t child_page_id  = ValueAt(i);
