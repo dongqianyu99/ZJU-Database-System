@@ -10,16 +10,56 @@
 /**
  * TODO: Student Implement
  */
-BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager, const KeyManager &KM,
-                     int leaf_max_size, int internal_max_size)
+BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager, const KeyManager &KM, int leaf_max_size, int internal_max_size)
     : index_id_(index_id),
       buffer_pool_manager_(buffer_pool_manager),
       processor_(KM),
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size) {
+
+    // Default size.
+    if (leaf_max_size_ == UNDEFINED_SIZE) {
+        leaf_max_size_ = (PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(RowId));
+    }
+    if (internal_max_size_ == UNDEFINED_SIZE) {
+        internal_max_size_ = (PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(page_id_t));
+    }
+
+    // Load root_page_id_ from header page.
+    Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+    if (header_page == nullptr) {
+        LOG(WARNING) << "Faied to fatch index roots page.";
+    } else {
+        auto root_page = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+        root_page->GetRootId(index_id_, &root_page_id_);
+    }
+    buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
 }
 
 void BPlusTree::Destroy(page_id_t current_page_id) {
+    // If called with default, destroy the whole tree.
+    if (current_page_id == INVALID_PAGE_ID)
+        if (root_page_id_ == INVALID_FRAME_ID) { return; } // The tree is already destroyed.
+        current_page_id = root_page_id_;
+
+    auto node = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(current_page_id)->GetData());
+    if (node == nullptr) { return; }
+    
+    // If the node is an internal node, delete recursively.
+    if (!node->IsLeafPage()) {
+        InternalPage *internal_node = static_cast<InternalPage *>(node);
+        for (int i = 0; i < internal_node->GetSize(); i++) {
+            Destroy(internal_node->ValueAt(i));
+        }
+    }
+
+    buffer_pool_manager_->UnpinPage(current_page_id, true);
+    buffer_pool_manager_->DeletePage(current_page_id);
+
+    if (current_page_id == root_page_id_) {
+        root_page_id_ = INVALID_PAGE_ID;
+        UpdateRootPageId(); // Call this method everytime root page id is changed.
+    }
 }
 
 /*
@@ -206,13 +246,14 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
 
 /*
  * Update/Insert root page id in header page(where page_id = INDEX_ROOTS_PAGE_ID,
- * header_page isdefined under include/page/header_page.h)
+ * header_page is defined under include/page/header_page.h)
  * Call this method everytime root page id is changed.
  * @parameter: insert_record      default value is false. When set to true,
  * insert a record <index_name, current_page_id> into header page instead of
  * updating it.
  */
 void BPlusTree::UpdateRootPageId(int insert_record) {
+    // 
 }
 
 /**
