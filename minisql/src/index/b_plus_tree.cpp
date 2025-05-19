@@ -30,7 +30,7 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
     if (header_page == nullptr) {
         LOG(WARNING) << "Faied to fatch index roots page.";
     } else {
-        auto root_page = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+        auto *root_page = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
         root_page->GetRootId(index_id_, &root_page_id_);
     }
     buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
@@ -42,7 +42,7 @@ void BPlusTree::Destroy(page_id_t current_page_id) {
         if (root_page_id_ == INVALID_FRAME_ID) { return; } // The tree is already destroyed.
         current_page_id = root_page_id_;
 
-    auto node = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(current_page_id)->GetData());
+    auto *node = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(current_page_id)->GetData());
     if (node == nullptr) { return; }
     
     // If the node is an internal node, delete recursively.
@@ -66,7 +66,7 @@ void BPlusTree::Destroy(page_id_t current_page_id) {
  * Helper function to decide whether current b+tree is empty
  */
 bool BPlusTree::IsEmpty() const {
-  return false;
+  return root_page_id_ == INVALID_PAGE_ID;
 }
 
 /*****************************************************************************
@@ -77,7 +77,24 @@ bool BPlusTree::IsEmpty() const {
  * This method is used for point query
  * @return : true means key exists
  */
-bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction) { return false; }
+bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn *transaction) {
+    if (IsEmpty()) { return false; }
+    auto *leaf_node = reinterpret_cast<LeafPage *>(FindLeafPage(key, root_page_id_, false)->GetData());
+
+    // Invalid key.
+    if (leaf_node == nullptr) { return false; }
+
+    // Look up in the leaf node.
+    RowId value;
+    bool found = leaf_node->Lookup(key, value, processor_);
+
+    buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
+
+    if (found) {
+        result.push_back(value);
+    }
+    return found;
+}
 
 /*****************************************************************************
  * INSERTION
