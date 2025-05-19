@@ -26,12 +26,12 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
     }
 
     // Load root_page_id_ from header page.
-    Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
-    if (header_page == nullptr) {
+    Page *root_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+    if (root_page == nullptr) {
         LOG(WARNING) << "Faied to fatch index roots page.";
     } else {
-        auto *root_page = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
-        root_page->GetRootId(index_id_, &root_page_id_);
+        auto *root_node = reinterpret_cast<IndexRootsPage *>)(root_page->GetData());
+        root_node->GetRootId(index_id_, &root_page_id_);
     }
     buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
 }
@@ -106,14 +106,33 @@ bool BPlusTree::GetValue(const GenericKey *key, std::vector<RowId> &result, Txn 
  * @return: since we only support unique key, if user try to insert duplicate
  * keys return false, otherwise return true.
  */
-bool BPlusTree::Insert(GenericKey *key, const RowId &value, Txn *transaction) { return false; }
+bool BPlusTree::Insert(GenericKey *key, const RowId &value, Txn *transaction) {
+    if (IsEmpty()) {
+        StartNewTree(key, value);
+        return true;
+    }
+    return InsertIntoLeaf(key, value, transaction);
+}
 /*
  * Insert constant key & value pair into an empty tree
  * User needs to first ask for new page from buffer pool manager(NOTICE: throw
  * an "out of memory" exception if returned value is nullptr), then update b+
  * tree's root page id and insert entry directly into leaf page.
  */
-void BPlusTree::StartNewTree(GenericKey *key, const RowId &value) {}
+void BPlusTree::StartNewTree(GenericKey *key, const RowId &value) {
+    page_id_t new_page_id;
+    Page *root_page = buffer_pool_manager_->NewPage(new_page_id);
+    
+    if (root_page == nullptr) { throw std::runtime_error("Out of memory error. Can't allocate a new page."); }
+    root_page_id_ = new_page_id;
+    UpdateRootPageId(1);
+    
+    auto *root_node = reinterpret_cast<LeafPage *>(root_page->GetData());
+    root_node->Init(root_page_id_, INVALID_PAGE_ID, processor_.GetKeySize(), leaf_max_size_);
+    root_node->Insert(key, value, processor_);
+    
+    buffer_pool_manager_->UnpinPage(root_page_id_, true);
+}
 
 /*
  * Insert constant key & value pair into leaf page
@@ -123,7 +142,39 @@ void BPlusTree::StartNewTree(GenericKey *key, const RowId &value) {}
  * @return: since we only support unique key, if user try to insert duplicate
  * keys return false, otherwise return true.
  */
-bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transaction) { return false; }
+bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transaction) {
+    Page *leaf_page = FindLeafPage(key, root_page_id_, false);
+    if (leaf_page == nullptr) { return false; } // Not found.
+    auto *leaf_node = reinterpret_cast<LeafPage *>(leaf_page->GetData());
+
+    // Check for duplications.
+    RowId value;
+    if (leaf_node->Lookup(key, value, processor_)) {
+       buffer_pool_manager_->UnpinPage(leaf_node, false);
+       return false;
+    }
+
+    // If the leaf node has extra space.
+    if (leaf_node->GetSize() < leaf_node->GetMaxSize()) {
+        leaf_node->Insert(key, value, processor_);
+        buffer_pool_manager_->UnpinPage(leaf_node, true);  
+    } else { // If not, need to split the node.
+        auto *new_leaf_node = Split(leaf_node, processor_); // Larger half is moved to the now node.
+        GenericKey *middle_key = new_leaf_node->KeyAt(0);
+
+        if (processor_.CompareKeys(key, middle_key) < 0) { // key < middle_key, insert into the old half.
+            leaf_node->Insert(key, value, processor_);
+        } else { // key > middle_key, insert into the new half.
+            new_leaf_node->Insert(key, value, processor_);
+        }
+
+        InsertIntoParent(leaf_node, middle_key, new_leaf_node, processor_); // Set to the parent node.
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
+        buffer_pool_manager_->UnpinPage(new_leaf_node->GetPageId(), true);
+    }
+
+    return true;
+}
 
 /*
  * Split input page and return newly created page.
