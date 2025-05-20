@@ -277,7 +277,56 @@ void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlus
  * delete entry from leaf page. Remember to deal with redistribute or merge if
  * necessary.
  */
-void BPlusTree::Remove(const GenericKey *key, Txn *transaction) {}
+void BPlusTree::Remove(const GenericKey *key, Txn *transaction) {
+    if (IsEmpty()) { return; }
+
+    // Find the right leaf page as deletion target.
+    Page *leaf_page = FindLeafPage(key, root_page_id_, false);
+    if (leaf_page == nullptr) { return; }
+    auto *leaf_node = reinterpret_cast<LeafPage *>(leaf_page->GetData());
+
+    int size_before_delete = leaf_node->GetSize();
+    
+    // Get key index.
+    int key_index = leaf_node->KeyIndex(key, processor_);
+    if (processor_(key, leaf_node->KeyAt(key_index)) != 0) { // Not found.
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
+        return; 
+    }
+
+    // Remove key_index.
+    leaf_node->RemoveAndDeleteRecord(key, processor_);
+
+    bool unpin_dirty = true; // Mark if the page still needs unpinning.
+
+    // Redistribute or merge(coalesce).
+    if (leaf_node->GetSize() < leaf_node->GetMinSize()) {
+        // The BPlusTree::CoalesceOrRedistribute() function is supposed to handle unpinning of the node it processes/deletes.
+        bool node_deleted = CoalesceOrRedistribute(leaf_node, transaction);
+        if (node_deleted) { unpin_dirty = false; }
+    }
+
+    // Make sure the page is unpinned.
+    if (unpin_dirty && leaf_page->GetPageId() == leaf_node->GetPageId()) 
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
+    else if (!unpin_dirty) {}  // The page is already handled. 
+    else // Not supposed to get here.
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
+
+    // Check if root has became empty.  
+    if (!IsEmpty()) {
+        Page *root_page = buffer_pool_manager_->FetchPage(root_page_id_);
+        auto *root_node = reinterpret_cast<BPlusTreePage *>(root_page->GetData());
+        if (root_node->IsLeafPage() && root_node->GetSize() == 0) {
+            buffer_pool_manager_->UnpinPage(root_page_id_, false);
+            buffer_pool_manager_->DeletePage(root_page_id_);
+            root_page_id_ = INVALID_PAGE_ID;
+            UpdateRootPageId();
+        } else {
+            buffer_pool_manager_->UnpinPage(root_page_id_, false);
+        }
+    }
+}
 
 /* todo
  * User needs to first find the sibling of input page. If sibling's size + input
@@ -288,7 +337,84 @@ void BPlusTree::Remove(const GenericKey *key, Txn *transaction) {}
  */
 template <typename N>
 bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
-  return false;
+    /**
+     * 1. If the node is smaller than the minimum size(underflow):
+     *    - Try to borrow from siblings(Redistribute);
+     *    - If can't, merge the node with its sibiling(Coalesce).
+     * 2. If Coalesce causes underflow in parent node, recursively handling parent nodes.
+     */
+    if (node->IsRootPage()) { return AdjustRoot(node); }
+
+    Page *parent_page = buffer_pool_manager_->FetchPage(node->GetParentPageId());
+    auto *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
+    // Get the index in its parent node.
+    int index_in_parent = parent_node->ValueIndex(node->GetPageId());
+
+    // Redistribute
+    // Try to find left sibling.
+    N *left_sibling_node = nullptr;
+    Page *left_sibling_page = nullptr;
+    if (index_in_parent > 0) { // Not the first one -> must have a left sibling.
+        page_id_t left_sibling_page_id = parent_node->ValueAt(index_in_parent - 1);
+        left_sibling_page = buffer_pool_manager_->FetchPage(left_sibling_page_id);
+        left_sibling_node = reinterpret_cast<N *>(left_sibling_page->GetData());
+
+        if (left_sibling_node->GetSize() > left_sibling_node->GetMinSize()) { // At least one element can be borrowed from the left sibling node.
+            /**
+             * keys_:     [      K1     K2     K3       ]
+             * values_:   [  P0     P1     P2     P3    ]
+             *               ↑      ↑      ↑      ↑
+             *           idx=0      1      2      3
+             * When redistribute with left sibling, use index_in_parent; ortherwise, use 
+             * index_in_parent + 1.
+             */
+            Redistribute(left_sibling_node, node, index_in_parent);
+            buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
+            buffer_pool_manager_->UnpinPage(left_sibling_node->GetPageId(), true);
+            return false; // Not need for deleting node.
+        }
+    }
+
+    // Try to find right sibling.
+    N *right_sibling_node = nullptr;
+    Page *right_sibling_page = nullptr;
+    if (index_in_parent < parent_node->GetSize() - 1) { // Not the last one -> must have a right sibling.
+        page_id_t right_sibling_page_id = parent_node->ValueAt(index_in_parent + 1);
+        right_sibling_page = buffer_pool_manager_->FetchPage(right_sibling_page_id);
+        right_sibling_node = reinterpret_cast<N *>(right_sibling_page->GetData());
+
+        if (right_sibling_node->GetSize() > right_sibling_node->GetMinSize()) { // At least one element can be borrowed from the right sibling node.
+            Redistribute(right_sibling_node, node, index_in_parent + 1);
+            buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
+            buffer_pool_manager_->UnpinPage(right_sibling_node->GetPageId(), true);
+            if (left_sibling_page) // If fechted but not used, unpin it.
+                buffer_pool_manager_->UnpinPage(left_sibling_page->GetPageId(), false);
+            return false; // Not need for deleting node.
+        }
+    }
+
+    // Coalesce
+    bool coalesce_with_left = false;
+    if (left_sibling_node) { // Coalesce with left sibling.
+        Coalesce(left_sibling_node, node, parent_node, index_in_parent, transaction);
+        buffer_pool_manager_->UnpinPage(leaf_sibling_node->GetPageId(), true);
+        if (right_sibling_page) 
+            buffer_pool_manager_->UnpinPage(right_sibling_page->GetPageId(), false);
+        return true; // Merge this node into the left sibling.
+    } else if (right_sibling_node) {  // Coalesce with right sibling.(only the first node)
+        Coalesce(right_sibling_node, node, parent_node, index_in_parent + 1, transaction);
+        buffer_pool_manager_->UnpinPage(right_sibling_node->GetPageId(), true);
+        return false;
+    } else { // Should not happen.
+        if (left_sibling_page) 
+            buffer_pool_manager_->UnpinPage(left_sibling_page->GetPageId(), false);
+        if (right_sibling_page)
+            buffer_pool_manager_->UnpinPage(right_sibling_page->GetPageId(), false);
+        buffer_pool_manager_->UnpinPage(parent_page->GetPageId(), false);
+        return false; // Merge the right sibling into this node.
+    }
+
+    return false;
 }
 
 /*
