@@ -368,7 +368,8 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
              * When redistribute with left sibling, use index_in_parent; ortherwise, use 
              * index_in_parent + 1.
              */
-            Redistribute(left_sibling_node, node, index_in_parent);
+            // Redistribute(left_sibling_node, node, index_in_parent);
+            Redistribute(left_sibling_node, node, 1);
             buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
             buffer_pool_manager_->UnpinPage(left_sibling_node->GetPageId(), true);
             return false; // Not need for deleting node.
@@ -384,7 +385,8 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
         right_sibling_node = reinterpret_cast<N *>(right_sibling_page->GetData());
 
         if (right_sibling_node->GetSize() > right_sibling_node->GetMinSize()) { // At least one element can be borrowed from the right sibling node.
-            Redistribute(right_sibling_node, node, index_in_parent + 1);
+            // Redistribute(right_sibling_node, node, index_in_parent + 1);
+            Redistribute(right_sibling_node, node, 0);
             buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
             buffer_pool_manager_->UnpinPage(right_sibling_node->GetPageId(), true);
             if (left_sibling_page) // If fechted but not used, unpin it.
@@ -470,8 +472,34 @@ bool BPlusTree::Coalesce(InternalPage *&neighbor_node, InternalPage *&node, Inte
  * @param   node               input from method coalesceOrRedistribute()
  */
 void BPlusTree::Redistribute(LeafPage *neighbor_node, LeafPage *node, int index) {
+    Page *parent_page = buffer_pool_manager_->FetchPage(node->GetParentPageId());
+    auto *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
+
+    if (index != 0) { // Sibling is left node.
+        neighbor_node->MoveLastToFrontOf(node);
+        parent_node->SetKeyAt(parent_node->ValueIndex(node->GetPageId()), node->KeyAt(0));
+    } else { // Sibling is right node.
+        neighbor_node->MoveFirstToEndOf(node);
+        parent_node->SetKeyAt(parent_node->ValueIndex(neighbor_node->GetPageId()), neighbor_node->KeyAt(0));
+    }
+    // Unpinned by the caller.
 }
 void BPlusTree::Redistribute(InternalPage *neighbor_node, InternalPage *node, int index) {
+    Page *parent_page = buffer_pool_manager_->FetchPage(node->GetParentPageId());
+    auto *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
+
+    if (index != 0) {  // Sibling is left node.
+        int middle_key_index = parent_node->ValueIndex(node->GetPageId());
+        neighbor_node->MoveLastToFrontOf(node,
+                                         parent_node->KeyAt(middle_key_index),
+                                         buffer_pool_manager_);
+    } else {  // Sibling is right node.
+        int middle_key_index = parent_node->ValueIndex(neighbor_node->GetPageId());
+        neighbor_node->MoveFirstToEndOf(node,
+                                        parent_node->KeyAt(middle_key_index),
+                                        buffer_pool_manager_);
+    }
+    // Unpinned by the caller.
 }
 /*
  * Update root page if necessary
@@ -484,7 +512,34 @@ void BPlusTree::Redistribute(InternalPage *neighbor_node, InternalPage *node, in
  * happened
  */
 bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
-  return false;
+    if (old_root_node->IsLeafPage()) {
+        if (old_root_node->GetSize() == 0) {
+            buffer_pool_manager_->DeletePage(old_root_node->GetPageId());
+            root_page_id_ = INVALID_PAGE_ID;
+            UpdateRootPageId();
+            return true; // Root has deleted.
+        }
+    } else {
+        /**
+         * Internal root case, where for a internal node, there is no key left but a child.
+         * In this case, we need to set the child as the new root.
+         */
+        auto *internal_root_node = reinterpret_cast<InternalPage *>(old_root_node->GetPageId());
+        if (internal_root_node->GetSize() == 0) {
+            root_page_id_ = internal_root_node->ValueAt(0); // The child becomes the new root.
+            UpdateRootPageId();
+            // Set the parent_id of the new root as INVALID_PAGE_ID.
+            Page *new_root_page = buffer_pool_manager_->FetchPage(root_page_id_);
+            auto *new_root_node = reinterpret_cast<BPlusTreePage *>(new_root_page->GetData());
+            new_root_node->SetParentPageId(INVALID_PAGE_ID);
+            buffer_pool_manager_->UnpinPage(root_page_id_, true);
+            // Delete the old one.
+            buffer_pool_manager_->DeletePage(old_root_node->GetPageId());
+            return true; // Root has deleted.
+        }
+    }
+    
+    return false;
 }
 
 /*****************************************************************************
