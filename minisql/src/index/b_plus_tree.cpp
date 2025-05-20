@@ -341,7 +341,7 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
      * 1. If the node is smaller than the minimum size(underflow):
      *    - Try to borrow from siblings(Redistribute);
      *    - If can't, merge the node with its sibiling(Coalesce).
-     * 2. If Coalesce causes underflow in parent node, recursively handling parent nodes.
+     * 2. If Coalesce causes underflowing in parent node, recursively handling parent nodes.
      */
     if (node->IsRootPage()) { return AdjustRoot(node); }
 
@@ -430,12 +430,34 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
  */
 bool BPlusTree::Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
                          Txn *transaction) {
-  return false;
+    node->MoveAllTo(neighbor_node);
+    neighbor_node->SetNextPageId(node->GetNextPageId());
+    parent->Remove(index);
+    buffer_pool_manager_->DeletePage(node->GetPageId());
+
+    // If parent node underflows.
+    if (parent->GetSize() < parent->GetMinSize()) {
+        return CoalesceOrRedistribute<BPlusTree::InternalPage>(parent, transaction);
+    } else {
+        buffer_pool_manager_->UnpinPage(parent->GetPageId(), true);
+        return false;
+    }
 }
 
 bool BPlusTree::Coalesce(InternalPage *&neighbor_node, InternalPage *&node, InternalPage *&parent, int index,
                          Txn *transaction) {
-  return false;
+    GenericKey *key_from_parent = parent->KeyAt(index);
+    node->MoveAllTo(neighbor_node, key_from_parent, buffer_pool_manager_);
+    parent->Remove(index);
+    buffer_pool_manager_->DeletePage(node->GetPageId());
+
+    // If parent node underflows.                       
+    if (parent->GetSize() < parent->GetMinSize()) {
+        return CoalesceOrRedistribute<BPlusTree::InternalPage>(parent, transaction);
+    } else {
+        buffer_pool_manager_->UnpinPage(parent->GetPageId(), true);
+        return false;
+    }
 }
 
 /*
