@@ -538,7 +538,7 @@ bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
             return true; // Root has deleted.
         }
     }
-    
+
     return false;
 }
 
@@ -551,7 +551,16 @@ bool BPlusTree::AdjustRoot(BPlusTreePage *old_root_node) {
  * @return : index iterator
  */
 IndexIterator BPlusTree::Begin() {
-  return IndexIterator();
+    if (IsEmpty()) { return End(); }
+    Page *leaf_page = FindLeafPage(nullptr, root_page_id_, true);
+    if (leaf_page == nullptr) { return End(); }
+
+    // Construct the iterator.
+    IndexIterator iter(leaf_page->GetPageId(), buffer_pool_manager_, 0);
+
+    buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), false);
+    
+    return iter;
 }
 
 /*
@@ -560,7 +569,18 @@ IndexIterator BPlusTree::Begin() {
  * @return : index iterator
  */
 IndexIterator BPlusTree::Begin(const GenericKey *key) {
-   return IndexIterator();
+    if (IsEmpty()) { return End(); }
+    Page *leaf_page = FindLeafPage(key, root_page_id_, true);
+    if (leaf_page == nullptr) { return End(); }
+    auto *leaf_node = reinterpret_cast<LeafPage *>(leaf_page->GetData());
+    int key_index = leaf_node->KeyIndex(key, processor_);
+
+    // Construct the iterator.
+    IndexIterator iter(leaf_page->GetPageId(), buffer_pool_manager_, key_index);
+
+    buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), false);
+
+    return iter;
 }
 
 /*
