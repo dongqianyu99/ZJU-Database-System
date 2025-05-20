@@ -123,7 +123,7 @@ void BPlusTree::StartNewTree(GenericKey *key, const RowId &value) {
     page_id_t new_page_id;
     Page *root_page = buffer_pool_manager_->NewPage(new_page_id);
     
-    if (root_page == nullptr) { throw std::runtime_error("Out of memory error. Can't allocate a new page."); }
+    if (root_page == nullptr) { throw std::runtime_error("Out of memory error! Can't allocate a new page!"); }
     root_page_id_ = new_page_id;
     UpdateRootPageId(1);
     
@@ -183,9 +183,32 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
  * an "out of memory" exception if returned value is nullptr), then move half
  * of key & value pairs from input page to newly created page
  */
-BPlusTreeInternalPage *BPlusTree::Split(InternalPage *node, Txn *transaction) { return nullptr; }
+BPlusTreeInternalPage *BPlusTree::Split(InternalPage *node, Txn *transaction) {
+    page_id_t new_page_id;
+    Page *new_internal_page = buffer_pool_manager_->NewPage(new_page_id);
+    if (new_internal_page == nullptr) { throw std::runtime_error("Out of memory error! Can't allocate a new page for split!"); }
+    auto *new_internal_node = reinterpret_cast<InternalPage *>(new_internal_page->GetData());
+    new_internal_node->Init(new_page_id, node->GetParentPageId(), processor_.GetKeySize(), internal_max_size_);
+    node->MoveHalfTo(new_internal_node, buffer_pool_manager_);
 
-BPlusTreeLeafPage *BPlusTree::Split(LeafPage *node, Txn *transaction) { return nullptr; }
+    // Unpinned in the BPlusTree::InsertIntoParent()
+    return new_internal_node;
+}
+
+BPlusTreeLeafPage *BPlusTree::Split(LeafPage *node, Txn *transaction) {
+    page_id_t new_page_id;
+    Page *new_leaf_page = buffer_pool_manager_->NewPage(new_page_id);
+    if (new_leaf_page == nullptr) { throw std::runtime_error("Out of memory error! Can't allocate a new page for split!"); }
+    auto *new_leaf_node = reinterpret_cast<LeafPage *>(new_leaf_page->GetData());
+    new_leaf_node->Init(new_page_id, node->GetParentPageId(), processor_.GetKeySize(), leaf_max_size_);
+    node->MoveHalfTo(new_leaf_node, buffer_pool_manager_);
+
+    new_leaf_node->SetNextPageId(node->GetNextPageId());
+    node->SetNextPageId(new_page_id);
+
+    // Upinned in the BPlusTree::InsertIntoLeaf()
+    return new_leaf_node;
+}
 
 /*
  * Insert key & value pair into internal page after split
@@ -196,7 +219,53 @@ BPlusTreeLeafPage *BPlusTree::Split(LeafPage *node, Txn *transaction) { return n
  * adjusted to take info of new_node into account. Remember to deal with split
  * recursively if necessary.
  */
-void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlusTreePage *new_node, Txn *transaction) {}
+void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlusTreePage *new_node, Txn *transaction) {
+    if (old_node->IsRootPage()) { // If the node to be splitted is the root node, create a new root node.
+        page_id_t new_root_page_id;
+        Page *new_root_page = buffer_pool_manager_->NewPage(new_root_page_id);
+        if (new_root_page == nullptr) { throw std::runtime_error("Out of memory error! Can't allocate a new page for split!"); }
+        auto *new_root_node = reinterpret_cast<InternalPage *>(new_root_page->GetData());
+        new_root_node->Init(new_root_page_id, INVALID_PAGE_ID, processor_.GetKeySize(), internal_max_size_);
+
+        // Populate new root page with old_value + new_key & new_value
+        new_root_node->PopulateNewRoot(old_node->GetPageId(), key, new_node->GetPageId());
+
+        old_node->SetParentPageId(new_root_page_id);
+        new_node->SetParentPageId(new_root_page_id);
+
+        root_page_id_ = new_root_page_id;
+        UpdateRootPageId();
+
+        buffer_pool_manager_->UnpinPage(new_root_page_id, true);
+        return;
+    }
+
+    // The node to be splitted is the root node.
+    page_id_t parent_page_id = old_node->GetParentPageId;
+    Page *parent_page = buffer_pool_manager_->FetchPage(parent_page_id);
+    auto *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
+
+    if (parent_node->GetSize() < parent_node->GetMaxSize()) { // No need to continue splitting.
+        parent_node->InsertNodeAfter(old_node->GetPageId(), key, new_node->GetPageId());
+        new_node->SetParentPageId(parent_page_id);
+        buffer_pool_manager_->UnpinPage(parent_page_id, true);
+    } else { // Parent is full, split.
+        InternalPage *new_parent_node_sibling = Split(parent_node, transaction);
+        GenericKey *middle_key = new_parent_node_sibling->KeyAt(0);
+        if (processor_.CompareKeys(key, middle_key) < 0) {
+            parent_node->InsertNodeAfter(old_node->GetPageId(), key, new_node->GetPageId());new_node->SetParentPageId(parent_node->GetPageId());
+        } else {
+            new_parent_node_sibling->InsertNodeAfter(old_node->GetPageId(), key, new_node->GetPageId());
+            new_node->SetParentPageId(new_parent_node_sibling->GetPageId());
+        }
+        
+        // Recursively splitting upwards if needed.
+        InsertIntoParent(parent_node, middle_key, new_parent_node_sibling, transaction);
+
+        buffer_pool_manager_->UnpinPage(parent_page_id, true);
+        buffer_pool_manager_->UnpinPage(new_parent_node_sibling->GetPageId(), true);
+    }
+}
 
 /*****************************************************************************
  * REMOVE
