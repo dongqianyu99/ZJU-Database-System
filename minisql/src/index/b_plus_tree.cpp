@@ -601,7 +601,32 @@ IndexIterator BPlusTree::End() {
  * Note: the leaf page is pinned, you need to unpin it after use.
  */
 Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool leftMost) {
-  return nullptr;
+    if (IsEmpty()) { return nullptr; }
+    
+    // If page_id is not provided or invalid, use root_page_id_.
+    page_id_t cur_page_id = (page_id == INVALID_PAGE_ID || page_id == 0) ? root_page_id_ : page_id;
+    if (cur_page_id == INVALID_PAGE_ID) { return nullptr; }
+
+    Page *page = buffer_pool_manager_->FetchPage(cur_page_id);
+    auto *node = reinterpret_cast<BPlusTreePage *>(page->GetData());
+
+    while (!node->IsLeafPage()) {
+        InternalPage *internal_node = static_cast<InternalPage *>(node);
+        page_id_t page_for_upin = internal_node->GetPageId(); // Record page id for unpining.
+
+        if (leftMost) {
+            cur_page_id = internal_node->ValueAt(0); // Go to the leftest node.
+        } else {
+            cur_page_id = internal_node->Lookup(key, processor_); // Find the wanted node.
+        }
+
+        buffer_pool_manager_->UnpinPage(page_for_upin, false);
+        if (cur_page_id == INVALID_PAGE_ID) { return nullptr; } // Should not happend.
+        page = buffer_pool_manager_->FetchPage(cur_page_id);
+        auto *node = reinterpret_cast<BPlusTreePage *>(page->GetData());
+    }
+    // Unpinned by the caller.
+    return page;
 }
 
 /*
@@ -613,7 +638,20 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
  * updating it.
  */
 void BPlusTree::UpdateRootPageId(int insert_record) {
-    // 
+    Page *header_page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+    if (header_page == nullptr) {
+        throw std::runtime_error("Unable to fetch INDEX_ROOTS_PAGE_ID");
+    }
+    auto *index_roots_page = reinterpret_cast<IndexRootsPage *>(header_page->GetData());
+
+    if (insert_record == 1) // Insert a new root.
+        index_roots_page->Insert(index_id_, root_page_id_);
+    else if (root_page_id_ == INVALID_PAGE_ID) // Tree deleted.
+        index_roots_page->Delete(index_id_);
+    else // Root page_id changed.
+        index_roots_page->Update(index_id_, root_page_id_);
+
+    buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, true);
 }
 
 /**
