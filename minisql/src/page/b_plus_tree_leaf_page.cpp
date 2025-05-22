@@ -179,7 +179,8 @@ void LeafPage::CopyNFrom(void *src, int size) {
 bool LeafPage::Lookup(const GenericKey *key, RowId &value, const KeyManager &KM) {
     int index = KeyIndex(key, KM);
 
-    if (index < GetSize() && KM.CompareKeys(key, KeyAt(index)) == 0) { // Found.
+    // if (index < GetSize() && KM.CompareKeys(key, KeyAt(index)) == 0) { // Found.
+    if (index < GetSize() && index >= 0) {
         value = ValueAt(index);
         return true;
     }

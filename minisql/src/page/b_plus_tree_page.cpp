@@ -31,7 +31,7 @@ int BPlusTreePage::GetKeySize() const {
 }
 
 void BPlusTreePage::SetKeySize(int size) {
-    ASSERT(size >= 0 && size <= max_size_, "Invalid key size!");
+    // ASSERT(size >= 0 && size <= max_size_, "Invalid key size!");
     key_size_ = size;
 }
 

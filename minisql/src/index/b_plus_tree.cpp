@@ -30,7 +30,7 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
     if (root_page == nullptr) {
         LOG(WARNING) << "Faied to fatch index roots page.";
     } else {
-        auto *root_node = reinterpret_cast<IndexRootsPage *>)(root_page->GetData());
+        auto *root_node = reinterpret_cast<IndexRootsPage *>(root_page->GetData());
         root_node->GetRootId(index_id_, &root_page_id_);
     }
     buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
@@ -148,18 +148,18 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
     auto *leaf_node = reinterpret_cast<LeafPage *>(leaf_page->GetData());
 
     // Check for duplications.
-    RowId value;
-    if (leaf_node->Lookup(key, value, processor_)) {
-       buffer_pool_manager_->UnpinPage(leaf_node, false);
+    RowId val;
+    if (leaf_node->Lookup(key, val, processor_)) {
+       buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
        return false;
     }
 
     // If the leaf node has extra space.
     if (leaf_node->GetSize() < leaf_node->GetMaxSize()) {
         leaf_node->Insert(key, value, processor_);
-        buffer_pool_manager_->UnpinPage(leaf_node, true);  
+        buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);  
     } else { // If not, need to split the node.
-        auto *new_leaf_node = Split(leaf_node, processor_); // Larger half is moved to the now node.
+        auto *new_leaf_node = Split(leaf_node, transaction); // Larger half is moved to the now node.
         GenericKey *middle_key = new_leaf_node->KeyAt(0);
 
         if (processor_.CompareKeys(key, middle_key) < 0) { // key < middle_key, insert into the old half.
@@ -168,7 +168,7 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
             new_leaf_node->Insert(key, value, processor_);
         }
 
-        InsertIntoParent(leaf_node, middle_key, new_leaf_node, processor_); // Set to the parent node.
+        InsertIntoParent(leaf_node, middle_key, new_leaf_node, transaction); // Set to the parent node.
         buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);
         buffer_pool_manager_->UnpinPage(new_leaf_node->GetPageId(), true);
     }
@@ -201,7 +201,7 @@ BPlusTreeLeafPage *BPlusTree::Split(LeafPage *node, Txn *transaction) {
     if (new_leaf_page == nullptr) { throw std::runtime_error("Out of memory error! Can't allocate a new page for split!"); }
     auto *new_leaf_node = reinterpret_cast<LeafPage *>(new_leaf_page->GetData());
     new_leaf_node->Init(new_page_id, node->GetParentPageId(), processor_.GetKeySize(), leaf_max_size_);
-    node->MoveHalfTo(new_leaf_node, buffer_pool_manager_);
+    node->MoveHalfTo(new_leaf_node);
 
     new_leaf_node->SetNextPageId(node->GetNextPageId());
     node->SetNextPageId(new_page_id);
@@ -241,7 +241,7 @@ void BPlusTree::InsertIntoParent(BPlusTreePage *old_node, GenericKey *key, BPlus
     }
 
     // The node to be splitted is the root node.
-    page_id_t parent_page_id = old_node->GetParentPageId;
+    page_id_t parent_page_id = old_node->GetParentPageId();
     Page *parent_page = buffer_pool_manager_->FetchPage(parent_page_id);
     auto *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
 
@@ -289,7 +289,7 @@ void BPlusTree::Remove(const GenericKey *key, Txn *transaction) {
     
     // Get key index.
     int key_index = leaf_node->KeyIndex(key, processor_);
-    if (processor_(key, leaf_node->KeyAt(key_index)) != 0) { // Not found.
+    if (processor_.CompareKeys(key, leaf_node->KeyAt(key_index)) != 0) { // Not found.
         buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), false);
         return; 
     }
@@ -399,7 +399,7 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
     bool coalesce_with_left = false;
     if (left_sibling_node) { // Coalesce with left sibling.
         Coalesce(left_sibling_node, node, parent_node, index_in_parent, transaction);
-        buffer_pool_manager_->UnpinPage(leaf_sibling_node->GetPageId(), true);
+        buffer_pool_manager_->UnpinPage(left_sibling_node->GetPageId(), true);
         if (right_sibling_page) 
             buffer_pool_manager_->UnpinPage(right_sibling_page->GetPageId(), false);
         return true; // Merge this node into the left sibling.

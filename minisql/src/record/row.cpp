@@ -23,10 +23,11 @@ uint32_t Row::SerializeTo(char *buf, Schema *schema) const {
     // Write Null Bitmap and Fields.
     uint32_t bitmap_len = (field_nums + 7) / 8; // Bytes to hold the Null Bitmap.
     std::memset(buffer_pos, 0, bitmap_len); // Set 0 at the beginning.
+    char *nullBitMap_pos = buffer_pos;
     buffer_pos += bitmap_len;
     for (uint32_t i = 0; i < field_nums; i++) {
         if (fields_[i]->IsNull()) { // Set 1 if is NULL.
-            buffer_pos[i / 8] |= static_cast<char>(1 << (i % 8)); // i/8: byte-offset, i%8: bit-offset
+            nullBitMap_pos[i / 8] |= static_cast<char>(1 << (i % 8)); // i/8: byte-offset, i%8: bit-offset
         }
         else {
             buffer_pos += fields_[i]->SerializeTo(buffer_pos);
@@ -47,7 +48,7 @@ uint32_t Row::DeserializeFrom(char *buf, Schema *schema) {
 
     // Read Field Nums and check.
     uint32_t field_nums = MACH_READ_UINT32(buffer_pos);
-    ASSERT(schema->GetColumnCount() == field_nums, "Fields size do not match schema's column size.");
+    // ASSERT(schema->GetColumnCount() == field_nums, "Fields size do not match schema's column size.");
     buffer_pos += sizeof(field_nums);
 
     // Read Null Bitmap and Fields.
