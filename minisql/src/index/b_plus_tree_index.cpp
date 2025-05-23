@@ -2,6 +2,7 @@
 
 #include "index/generic_key.h"
 #include "utils/tree_file_mgr.h"
+#include <fstream>
 BPlusTreeIndex::BPlusTreeIndex(index_id_t index_id, IndexSchema *key_schema, size_t key_size,
                                BufferPoolManager *buffer_pool_manager)
     : Index(index_id, key_schema),
@@ -14,6 +15,15 @@ dberr_t BPlusTreeIndex::InsertEntry(const Row &key, RowId row_id, Txn *txn) {
   processor_.SerializeFromKey(index_key, key, key_schema_);
 
   bool status = container_.Insert(index_key, row_id, txn);
+  
+  // std::ofstream out("tree.dot");  // 打开输出文件
+  // if (out.is_open()) {
+  //     container_.PrintTree(out, processor_.GetSchema());  // 调用函数
+  //     out.close();                     // 关闭文件
+  // } else {
+  //     std::cerr << "Failed to open output file." << std::endl;
+  // }
+
   free(index_key);
   //  TreeFileManagers mgr("tree_");
   //  static int i = 0;

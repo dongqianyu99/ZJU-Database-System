@@ -48,16 +48,17 @@ TEST(BPlusTreeTests, BPlusTreeIndexSimpleTest) {
   const TableSchema table_schema(columns);
   auto *index_schema = Schema::ShallowCopySchema(&table_schema, index_key_map);
   auto *index = new BPlusTreeIndex(0, index_schema, 256, bpm_);
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 20; i++) {
     std::vector<Field> fields{Field(TypeId::kTypeInt, i),
                               Field(TypeId::kTypeChar, const_cast<char *>("minisql"), 7, true)};
     Row row(fields);
     RowId rid(1000, i);
     ASSERT_EQ(DB_SUCCESS, index->InsertEntry(row, rid, nullptr));
   }
+
   // Test Scan
   std::vector<RowId> ret;
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 20; i++) {
     std::vector<Field> fields{Field(TypeId::kTypeInt, i),
                               Field(TypeId::kTypeChar, const_cast<char *>("minisql"), 7, true)};
     Row row(fields);
