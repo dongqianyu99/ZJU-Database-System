@@ -64,14 +64,32 @@ int LeafPage::KeyIndex(const GenericKey *key, const KeyManager &KM) {
         int mid = (left + right) / 2;
         GenericKey *mid_key = KeyAt(mid);
 
-        if (KM.CompareKeys(key, mid_key) < 0) {
+        if (KM.CompareKeys(key, mid_key) <= 0) {
             right = mid - 1;
         } else {
             left = mid + 1;
         }
     }
 
-    return right;
+    return left;
+//       int left = 0;
+//   int right = GetSize();
+//   while (left < right) {
+//     int mid = (left + right) / 2;
+//     GenericKey *midKey = KeyAt(mid);
+//     int compare = KM.CompareKeys(key, midKey);
+//     switch (compare) {
+//       case -1:
+//         right = mid;
+//         break;
+//       case 0:
+//         return mid;
+//       case 1:
+//         left = mid + 1;
+//         break;
+//     }
+//   }
+//   return left;
 }
 
 /*
@@ -179,8 +197,7 @@ void LeafPage::CopyNFrom(void *src, int size) {
 bool LeafPage::Lookup(const GenericKey *key, RowId &value, const KeyManager &KM) {
     int index = KeyIndex(key, KM);
 
-    // if (index < GetSize() && KM.CompareKeys(key, KeyAt(index)) == 0) { // Found.
-    if (index < GetSize() && index >= 0) {
+    if (index < GetSize() && KM.CompareKeys(key, KeyAt(index)) == 0) { // Found.
         value = ValueAt(index);
         return true;
     }

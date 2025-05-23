@@ -76,8 +76,8 @@ uint32_t Row::GetSerializedSize(Schema *schema) const {
     ASSERT(schema->GetColumnCount() == fields_.size(), "Fields size do not match schema's column size.");
 
     uint32_t size = 0;
-    size += sizeof(uint32_t);
-    size += (fields_.size() + 7) / 8;
+    size += sizeof(uint32_t); // Field nums
+    size += (fields_.size() + 7) / 8; // Null Bitmap
     for (uint32_t i = 0; i < fields_.size(); i++) {
         if (!fields_[i]->IsNull())
             size += fields_[i]->GetSerializedSize();
