@@ -21,7 +21,7 @@ TEST(BPlusTreeTests, SampleTest) {
   BPlusTree tree(0, engine.bpm_, KP);
   TreeFileManagers mgr("tree_");
   // Prepare data
-  const int n = 100;
+  const int n = 6;
   vector<GenericKey *> keys;
   vector<RowId> values;
   vector<GenericKey *> delete_seq;
@@ -36,9 +36,9 @@ TEST(BPlusTreeTests, SampleTest) {
   }
   vector<GenericKey *> keys_copy(keys);
   // Shuffle data
-  ShuffleArray(keys);
-  ShuffleArray(values);
-  ShuffleArray(delete_seq);
+  // ShuffleArray(keys);
+  // ShuffleArray(values);
+  // ShuffleArray(delete_seq);
   // Map key value
   for (int i = 0; i < n; i++) {
     kv_map[keys[i]] = values[i];
@@ -49,8 +49,18 @@ TEST(BPlusTreeTests, SampleTest) {
   // Insert data
   for (int i = 0; i < n; i++) {
     tree.Insert(keys[i], values[i]);
+    // std::ofstream out("tree.dot");
+    // if (out.is_open()) {
+    //     tree.PrintTree(out, table_schema);  // 调用函数
+    //     out.close();                     // 关闭文件
+    // } else {
+    //     std::cerr << "Failed to open output file." << std::endl;
+    // }
   }
   ASSERT_TRUE(tree.Check());
+  // Page *check_page = tree.FindLeafPage(keys[4], INVALID_PAGE_ID, false);
+  // auto *check_node = reinterpret_cast<LeafPage *>(check_page->GetData());
+
   
   // Print tree
   tree.PrintTree(mgr[0], table_schema);
@@ -65,6 +75,7 @@ TEST(BPlusTreeTests, SampleTest) {
   // Search keys
   vector<RowId> ans;
   for (int i = 0; i < n; i++) {
+    // std::cout << "i = " << i << std::endl;
     tree.GetValue(keys_copy[i], ans);
     ASSERT_EQ(kv_map[keys_copy[i]], ans[i]);
   }

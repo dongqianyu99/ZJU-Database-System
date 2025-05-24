@@ -119,7 +119,7 @@ int InternalPage::InsertNodeAfter(const page_id_t &old_value, GenericKey *new_ke
 
     // Find the index of the old value.
     int index = ValueIndex(old_value);
-    if (index = -1) // If not found.
+    if (index == -1) // If not found.
         return cur_size;
 
     // Make space for the new key-value pair.
@@ -130,8 +130,8 @@ int InternalPage::InsertNodeAfter(const page_id_t &old_value, GenericKey *new_ke
     }
 
     // Insert the new-key pair.
-    SetKeyAt(index, new_key);
-    SetValueAt(index, new_value);
+    SetKeyAt(index + 1, new_key);
+    SetValueAt(index + 1, new_value);
 
     // Update the size.
     IncreaseSize(1);

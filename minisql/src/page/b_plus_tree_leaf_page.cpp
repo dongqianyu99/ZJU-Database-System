@@ -221,7 +221,7 @@ int LeafPage::RemoveAndDeleteRecord(const GenericKey *key, const KeyManager &KM)
     int index = KeyIndex(key, KM);
 
     // Check if the index exists and matches.
-    if (index >= cur_size || KM.CompareKeys(key, KeyAt(index)) != 0) { return GetSize(); }
+    if (index >= cur_size || KM.CompareKeys(key, KeyAt(index)) != 0) { return cur_size; }
 
     // Move forward.
     for (int i = index + 1; i < cur_size; i++) {
