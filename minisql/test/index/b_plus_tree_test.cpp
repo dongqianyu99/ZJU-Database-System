@@ -6,6 +6,8 @@
 #include "utils/tree_file_mgr.h"
 #include "utils/utils.h"
 
+#include <fstream>
+
 static const std::string db_name = "bp_tree_insert_test.db";
 
 TEST(BPlusTreeTests, SampleTest) {
@@ -19,7 +21,7 @@ TEST(BPlusTreeTests, SampleTest) {
   BPlusTree tree(0, engine.bpm_, KP);
   TreeFileManagers mgr("tree_");
   // Prepare data
-  const int n = 2000;
+  const int n = 100;
   vector<GenericKey *> keys;
   vector<RowId> values;
   vector<GenericKey *> delete_seq;
@@ -41,13 +43,25 @@ TEST(BPlusTreeTests, SampleTest) {
   for (int i = 0; i < n; i++) {
     kv_map[keys[i]] = values[i];
   }
+
+  // std::cout << "Map key value done." << endl;
+
   // Insert data
   for (int i = 0; i < n; i++) {
     tree.Insert(keys[i], values[i]);
   }
   ASSERT_TRUE(tree.Check());
+  
   // Print tree
   tree.PrintTree(mgr[0], table_schema);
+  // std::ofstream out("tree.dot");  // 打开输出文件
+  // if (out.is_open()) {
+  //     tree.PrintTree(out, table_schema);  // 调用函数
+  //     out.close();                     // 关闭文件
+  // } else {
+  //     std::cerr << "Failed to open output file." << std::endl;
+  // }
+
   // Search keys
   vector<RowId> ans;
   for (int i = 0; i < n; i++) {

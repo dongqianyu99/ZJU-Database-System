@@ -158,7 +158,12 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
     if (leaf_node->GetSize() < leaf_node->GetMaxSize()) {
         leaf_node->Insert(key, value, processor_);
         buffer_pool_manager_->UnpinPage(leaf_node->GetPageId(), true);  
+
+        // std::cout << "Insert. Not spliting." << endl;
+
     } else { // If not, need to split the node.
+        std::cout << "Spliting." << endl;
+
         auto *new_leaf_node = Split(leaf_node, transaction); // Larger half is moved to the now node.
         GenericKey *middle_key = new_leaf_node->KeyAt(0);
 
@@ -623,7 +628,7 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
         buffer_pool_manager_->UnpinPage(page_for_upin, false);
         if (cur_page_id == INVALID_PAGE_ID) { return nullptr; } // Should not happend.
         page = buffer_pool_manager_->FetchPage(cur_page_id);
-        auto *node = reinterpret_cast<BPlusTreePage *>(page->GetData());
+        node = reinterpret_cast<BPlusTreePage *>(page->GetData());
     }
     // Unpinned by the caller.
     return page;
