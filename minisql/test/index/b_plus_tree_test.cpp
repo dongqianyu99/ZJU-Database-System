@@ -83,6 +83,14 @@ TEST(BPlusTreeTests, SampleTest) {
   // Delete half keys
   for (int i = 0; i < n / 2; i++) {
     tree.Remove(delete_seq[i]);
+    // std::ofstream out("tree.dot");  // 打开输出文件
+    // if (out.is_open()) {
+    //     tree.PrintTree(out, table_schema);  // 调用函数
+    //     out.close();                     // 关闭文件
+    // } else {
+    //     std::cerr << "Failed to open output file." << std::endl;
+    // }
+
   }
   tree.PrintTree(mgr[1], table_schema);
   // Check valid

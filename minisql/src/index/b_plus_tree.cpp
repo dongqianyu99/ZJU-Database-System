@@ -409,7 +409,7 @@ bool BPlusTree::CoalesceOrRedistribute(N *&node, Txn *transaction) {
             buffer_pool_manager_->UnpinPage(right_sibling_page->GetPageId(), false);
         return true; // Merge this node into the left sibling.
     } else if (right_sibling_node) {  // Coalesce with right sibling.(only the first node)
-        Coalesce(right_sibling_node, node, parent_node, index_in_parent + 1, transaction);
+        Coalesce(node, right_sibling_node, parent_node, index_in_parent + 1, transaction);
         buffer_pool_manager_->UnpinPage(right_sibling_node->GetPageId(), true);
         return false;
     } else { // Should not happen.
