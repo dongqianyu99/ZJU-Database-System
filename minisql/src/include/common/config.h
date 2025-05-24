@@ -13,11 +13,11 @@ static constexpr int META_PAGE_ID = 0;          // physical page id of the disk 
 static constexpr int CATALOG_META_PAGE_ID = 0;  // logical page id of the catalog meta data
 static constexpr int INDEX_ROOTS_PAGE_ID = 1;   // logical page id of the index roots
 
-// static constexpr int PAGE_SIZE = 4096;                  // size of a data page in byte
-// static constexpr int DEFAULT_BUFFER_POOL_SIZE = 20480;  // default size of buffer pool
+static constexpr int PAGE_SIZE = 4096;                  // size of a data page in byte
+static constexpr int DEFAULT_BUFFER_POOL_SIZE = 20480;  // default size of buffer pool
 
-static constexpr int PAGE_SIZE = 128;                  // size of a data page in byte
-static constexpr int DEFAULT_BUFFER_POOL_SIZE = 1024 * 5;  // default size of buffer pool
+// static constexpr int PAGE_SIZE = 128;                  // size of a data page in byte
+// static constexpr int DEFAULT_BUFFER_POOL_SIZE = 1024 * 5;  // default size of buffer pool
 
 static constexpr uint32_t FIELD_NULL_LEN = UINT32_MAX;
 static constexpr uint32_t VARCHAR_MAX_LEN = PAGE_SIZE / 2;  // max length of varchar

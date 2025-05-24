@@ -162,7 +162,7 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
         // std::cout << "Insert. Not spliting." << endl;
 
     } else { // If not, need to split the node.
-        std::cout << "Spliting." << endl;
+        // std::cout << "Spliting." << endl;
 
         auto *new_leaf_node = Split(leaf_node, transaction); // Larger half is moved to the now node.
         GenericKey *middle_key = new_leaf_node->KeyAt(0);
