@@ -28,8 +28,8 @@ using ValType = int32_t;
 struct LogRec {
     LogRec() = default;
 
-    LogRec(LogRecType type, lsn_t lsn, lsn_t prev_lsn, txn_id_t txn_id)
-        : type_(type), lsn_(lsn), prev_lsn_(prev_lsn), txn_id_(txn_id) {}
+    LogRec(LogRecType type,  txn_id_t txn_id, lsn_t lsn, lsn_t prev_lsn)
+        : type_(type),  txn_id_(txn_id), lsn_(lsn), prev_lsn_(prev_lsn) {}
 
     virtual ~LogRec() = default;
 
@@ -51,8 +51,8 @@ typedef std::shared_ptr<LogRec> LogRecPtr;
 struct InsertLogRec : public LogRec {
     KeyType ins_key_;
     ValType ins_val_;   
-    InsertLogRec(txn_id_t txn_id, KeyType ins_key, ValType ins_val)
-        : LogRec(LogRecType::kInsert, next_lsn_++, prev_lsn_map_[txn_id], txn_id),
+    InsertLogRec(txn_id_t txn_id, KeyType ins_key, ValType ins_val, lsn_t lsn, lsn_t prev_lsn)
+        : LogRec(LogRecType::kInsert, txn_id, lsn, prev_lsn), 
           ins_key_(std::move(ins_key)), ins_val_(ins_val) {}
 
 
@@ -60,9 +60,9 @@ struct InsertLogRec : public LogRec {
 
 struct DeleteLogRec : public LogRec {
     KeyType del_key_;
-    ValType del_val_{};
-    DeleteLogRec(txn_id_t txn_id, KeyType del_key, ValType del_val)
-        : LogRec(LogRecType::kDelete, next_lsn_++, prev_lsn_map_[txn_id], txn_id),
+    ValType del_val_;
+    DeleteLogRec(txn_id_t txn_id, KeyType del_key, ValType del_val, lsn_t lsn, lsn_t prev_lsn)
+        : LogRec(LogRecType::kDelete, txn_id, lsn, prev_lsn),
           del_key_(std::move(del_key)), del_val_(del_val) {}
 };
 
@@ -109,7 +109,7 @@ static LogRecPtr CreateInsertLog(txn_id_t txn_id, KeyType ins_key, ValType ins_v
         prev_lsn = LogRec::prev_lsn_map_[txn_id];
     }
     LogRec::prev_lsn_map_[txn_id] = current_lsn;
-    return std::make_shared<InsertLogRec>(txn_id, std::move(ins_key), ins_val, current_lsn, prev_lsn);
+    return std::make_shared<InsertLogRec>(txn_id, ins_key, ins_val, current_lsn, prev_lsn);
 }
 
 /**
@@ -123,7 +123,7 @@ static LogRecPtr CreateDeleteLog(txn_id_t txn_id, KeyType del_key, ValType del_v
         prev_lsn = LogRec::prev_lsn_map_[txn_id];
     }
     LogRec::prev_lsn_map_[txn_id] = current_lsn;
-    return std::make_shared<DeleteLogRec>(txn_id, std::move(del_key), del_val, current_lsn, prev_lsn);
+    return std::make_shared<DeleteLogRec>(txn_id, del_key, del_val, current_lsn, prev_lsn);
 }
 
 /**
