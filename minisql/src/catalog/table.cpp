@@ -29,12 +29,12 @@ uint32_t TableMetadata::SerializeTo(char *buf) const {
  */
 uint32_t TableMetadata::GetSerializedSize() const {
     if (schema_ == nullptr) { 
-        LOG(ERROR) << "Schema should not be null whe calculating serialized size."
+        LOG(ERROR) << "Schema should not be null whe calculating serialized size.";
     }
     // return 4 + 4 + MACH_STR_SERIALIZED_SIZE(table_name_) + 4 + schema_->GetSerializedSize();
     return sizeof(uint32_t) + // TABLE_METADATA_MAGIC_NUM
            sizeof(table_id_t) + // table_id_
-           MACH_STR_SERIALIZED_SIZE(table_name_) // table_name_
+           MACH_STR_SERIALIZED_SIZE(table_name_) + // table_name_
            sizeof(page_id_t) + // root_page_id_
            schema_->GetSerializedSize(); // table schema
 }

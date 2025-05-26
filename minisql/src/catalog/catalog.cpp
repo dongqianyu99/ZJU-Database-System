@@ -55,8 +55,11 @@ CatalogMeta *CatalogMeta::DeserializeFrom(char *buf) {
  * TODO: Student Implement
  */
 uint32_t CatalogMeta::GetSerializedSize() const {
-  ASSERT(false, "Not Implemented yet");
-  return 0;
+    return sizeof(uint32_t) + // magic number
+           sizeof(uint32_t) + // table_meta_pages_ count
+           sizeof(uint32_t) + // index_meta_pages_ count
+           table_meta_pages_.size() * (sizeof(table_id_t) + sizeof(page_id_t)) +
+           index_meta_pages_.size() * (sizeof(table_id_t) + sizeof(page_id_t));
 }
 
 CatalogMeta::CatalogMeta() {}
@@ -66,8 +69,50 @@ CatalogMeta::CatalogMeta() {}
  */
 CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManager *lock_manager,
                                LogManager *log_manager, bool init)
-    : buffer_pool_manager_(buffer_pool_manager), lock_manager_(lock_manager), log_manager_(log_manager) {
-//    ASSERT(false, "Not Implemented yet");
+    : buffer_pool_manager_(buffer_pool_manager), 
+      lock_manager_(lock_manager), 
+      log_manager_(log_manager),
+      catalog_meta_(nullptr),
+      next_table_id_(0),
+      next_index_id_(0) { 
+    LOG(INFO) << "CatalogManager: Initializing.";
+    if (init) { // New database
+        catalog_meta_ = CatalogMeta::NewInstance();
+        if (FlushCatalogMetaPage() != DB_SUCCESS) {
+            LOG(FATAL) << "Failed to flush initial catalog metadata page.";
+            delete catalog_meta_;
+            catalog_meta_ = nullptr;
+        }
+        LOG(INFO) << "CatalogManager: Initialized new catalog metadata.";
+    } else { // Existing database
+        Page *meta_page = buffer_pool_manager->FetchPage(CATALOG_META_PAGE_ID);
+        if (meta_page == nullptr) { 
+            LOG(FATAL) << "Failed to fetch catalog meta page " << CATALOG_META_PAGE_ID << ".";
+        }
+        catalog_meta_ = CatalogMeta::DeserializeFrom(meta_page->GetData());
+        buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, false);
+        if (catalog_meta_ == nullptr) { 
+            LOG(FATAL) << "Failed to deserialize catalog metadata from page " << CATALOG_META_PAGE_ID;
+        }
+
+        // Load all tables
+        for (const auto &pair : catalog_meta_->table_meta_pages_) {
+            if (LoadTable(pair.first, pair.second) != DB_SUCCESS) {
+                LOG(ERROR) << "Failed to load table id " << pair.first << " from page " << pair.second <<".";
+            }
+        }
+
+        // Load all indexes
+        for (const auto &pair : catalog_meta_->index_meta_pages_) {
+            if (LoadIndex(pair.first, pair.second) != DB_SUCCESS) {
+                LOG(ERROR) <<  "Failed to load index id " << pair.first << " from page " << pair.second <<".";
+            }
+        }
+
+        next_table_id_.store(catalog_meta_->GetNextTableId());
+        next_index_id_.store(catalog_meta_->GetNextIndexId());
+        LOG(INFO) << "CatalogManager: Catalog loaded.";
+    }
 }
 
 CatalogManager::~CatalogManager() {
