@@ -46,8 +46,7 @@ uint32_t IndexMetadata::GetSerializedSize() const {
     // Calculate the total size needed for serialization.
     return sizeof(uint32_t) + // INDEX_METADATA_MAGIC_NUM
            sizeof(index_id_t) + // index_id_
-           sizeof(uint32_t) + // index_name_
-           index_name_.length() +
+           MACH_STR_SERIALIZED_SIZE(index_name_) + // index_name_
            sizeof(table_id_t) + // table_id_
            sizeof(uint32_t) + // key count
            key_map_.size() + sizeof(uint32_t); // key_map_ data
