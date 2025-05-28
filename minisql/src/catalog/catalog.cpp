@@ -59,7 +59,7 @@ uint32_t CatalogMeta::GetSerializedSize() const {
            sizeof(uint32_t) + // table_meta_pages_ count
            sizeof(uint32_t) + // index_meta_pages_ count
            table_meta_pages_.size() * (sizeof(table_id_t) + sizeof(page_id_t)) +
-           index_meta_pages_.size() * (sizeof(table_id_t) + sizeof(page_id_t));
+           index_meta_pages_.size() * (sizeof(index_id_t) + sizeof(page_id_t));
 }
 
 CatalogMeta::CatalogMeta() {}
@@ -92,7 +92,7 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
         catalog_meta_ = CatalogMeta::DeserializeFrom(meta_page->GetData());
         buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, false);
         if (catalog_meta_ == nullptr) { 
-            LOG(FATAL) << "Failed to deserialize catalog metadata from page " << CATALOG_META_PAGE_ID;
+            LOG(FATAL) << "Failed to deserialize catalog metadata from page " << CATALOG_META_PAGE_ID << ".";
         }
 
         // Load all tables
@@ -130,24 +130,99 @@ CatalogManager::~CatalogManager() {
  * TODO: Student Implement
  */
 dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schema, Txn *txn, TableInfo *&table_info) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    LOG(INFO) << "CatalogManager: CreateTable Attempt: " << table_name;
+    // Check for duplication
+    if (table_names_.count(table_name)) {
+        LOG(ERROR) << "CatalogManager: CreateTable Failed - Table already exists: " << table_name;
+        return DB_TABLE_ALREADY_EXIST;
+    }
+
+    table_id_t new_table_id = next_table_id_.fetch_add(1);
+    page_id_t meta_page_id;
+    Page *table_meta_page = buffer_pool_manager_->NewPage(meta_page_id);
+    if (table_meta_page == nullptr) {
+        LOG(ERROR) << "CatalogManager: CreateTable Failed - Cannot allocate page for table metadata for '" << table_name << "'.";
+        next_table_id_.fetch_sub(1); // Rollback ID
+        return DB_FAILED;
+    }
+
+    try {
+        TableMetadata *table_meta = TableMetadata::Create(new_table_id, table_name, INVALID_PAGE_ID, schema);
+        if (!table_meta) {
+            throw std::runtime_error("TableMetadata::Create failed to create table_meta.");
+        }
+
+        table_meta->SerializeTo(table_meta_page->GetData());
+        buffer_pool_manager_->UnpinPage(meta_page_id, true);
+
+        TableInfo *new_table_info = TableInfo::Create();
+        new_table_info->Init(table_meta, nullptr);
+
+        catalog_meta_->GetTableMetaPages()->emplace(new_table_id, meta_page_id);
+        table_names_[table_name] = new_table_id;
+        tables_[new_table_id] = new_table_info;
+        
+        if (FlushCatalogMetaPage() != DB_SUCCESS) {
+            throw std::runtime_error("Failed to flush catalog meta page after creating table.");
+        }
+
+        // Set output parameter and return
+        table_info = new_table_info;
+        LOG(INFO) << "CatalogManager: Table '" << table_name << "', id = " << new_table_id
+ << " successfully created.";
+        return DB_SUCCESS;
+    } catch (const std::exception &e) {
+        LOG(ERROR) << "CatalogManager: Creat table '" << table_name << "' failed." << e.what();
+
+        // Rollback
+        next_table_id_.fetch_sub(1);
+
+        if (catalog_meta_ && catalog_meta_->GetTableMetaPages()->count(new_table_id)) {
+            catalog_meta_->GetTableMetaPages()->erase(new_table_id);
+        }
+        if (table_names_.count(table_name)) {
+            table_names_.erase(table_name);
+        }
+        if (tables_.count(new_table_id)) {
+            tables_.erase(new_table_id);
+        }
+        if (meta_page_id != INVALID_PAGE_ID) {
+            buffer_pool_manager_->DeletePage(meta_page_id);
+        }
+        table_info = nullptr;
+        return DB_FAILED;
+    }
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_info) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    auto it_name = table_names_.find(table_name);
+    if (it_name == table_names_.end()) {
+        return DB_TABLE_NOT_EXIST;
+    }
+    return GetTable(it_name->second, table_info);
+}
+
+dberr_t CatalogManager::GetTable(const table_id_t table_id, TableInfo *&table_info) {
+    auto it_table = tables_.find(table_id);
+    if (it_table == tables_.end()) {
+        return DB_TABLE_NOT_EXIST;
+    }
+    table_info = it_table->second;
+    return DB_SUCCESS;
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTables(vector<TableInfo *> &tables) const {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    tables.clear();
+    for (const auto &pair : tables_) {
+        tables.push_back(pair.second);
+    }
+    return DB_SUCCESS;
 }
 
 /**
