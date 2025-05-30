@@ -231,95 +231,93 @@ dberr_t CatalogManager::GetTables(vector<TableInfo *> &tables) const {
 dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string &index_name,
                                     const std::vector<std::string> &index_keys, Txn *txn, IndexInfo *&index_info,
                                     const string &index_type) {
-      LOG(INFO) << "CatalogManager: Attempting to create index '" << index_name << "' on table '" << table_name << "' with type '" << index_type << "'.";
-      
-      // Get table
-      TableInfo *table_info = nullptr;
-      if (GetTable(table_name, table_info) != DB_SUCCESS || table_info == nullptr) {
-          LOG(ERROR) << "CatalogManager: CreateIndex Failed - Table '" << table_name << "' not found.";
-          return DB_TABLE_NOT_EXIST;
-      } 
+    LOG(INFO) << "CatalogManager: Attempting to create index '" << index_name << "' on table '" << table_name << "' with type '" << index_type << "'.";
+    
+    // Get table
+    TableInfo *table_info = nullptr;
+    if (GetTable(table_name, table_info) != DB_SUCCESS || table_info == nullptr) {
+        LOG(ERROR) << "CatalogManager: CreateIndex Failed - Table '" << table_name << "' not found.";
+        return DB_TABLE_NOT_EXIST;
+    } 
 
-      // Check for duplication
-      auto it_table_index = index_names_.find(table_name);
-      if (it_table_index != index_names_.end() && it_table_index->second.count(index_name)) {
-          LOG(ERROR) << "CatalogManager: CreateIndex Failed - Index '" << index_name << "' already exists.";
-          return DB_INDEX_ALREADY_EXIST;
-      }
+    // Check for duplication
+    auto it_table_index = index_names_.find(table_name);
+    if (it_table_index != index_names_.end() && it_table_index->second.count(index_name)) {
+        LOG(ERROR) << "CatalogManager: CreateIndex Failed - Index '" << index_name << "' already exists.";
+        return DB_INDEX_ALREADY_EXIST;
+    }
 
-      std::vector<uint32_t> key_map;
-      const TableSchema *table_schema = table_info->GetSchema();
-      for (const std::string &key_col_name : index_keys) {
-          uint32_t col_index;
-          if (table_schema->GetColumnIndex(key_col_name, col_index) != DB_SUCCESS) {
-              LOG(ERROR) << "CatalogManager: CreateIndex Failed - Column '" << key_col_name << "' not found.";
-          }
-          key_map.push_back(col_index);
-      }
-      if (key_map.empty()) {
-          LOG(ERROR) << "CatalogManager: CreateIndex Failed - No valid key columns provided for index '" << index_name << "'.";
-          return DB_FAILED;
-      }
+    std::vector<uint32_t> key_map;
+    const TableSchema *table_schema = table_info->GetSchema();
+    for (const std::string &key_col_name : index_keys) {
+        uint32_t col_index;
+        if (table_schema->GetColumnIndex(key_col_name, col_index) != DB_SUCCESS) {
+            LOG(ERROR) << "CatalogManager: CreateIndex Failed - Column '" << key_col_name << "' not found.";
+        }
+        key_map.push_back(col_index);
+    }
+    if (key_map.empty()) {
+        LOG(ERROR) << "CatalogManager: CreateIndex Failed - No valid key columns provided for index '" << index_name << "'.";
+        return DB_FAILED;
+    }
 
-      index_id_t new_index_id = next_index_id_.fetch_add(1);
-      page_id_t meta_page_id = INVALID_PAGE_ID;
-      Page *index_meta_page = buffer_pool_manager_->NewPage(meta_page_id);
+    index_id_t new_index_id = next_index_id_.fetch_add(1);
+    page_id_t meta_page_id = INVALID_PAGE_ID;
+    Page *index_meta_page = buffer_pool_manager_->NewPage(meta_page_id);
 
-      if (index_meta_page == nullptr || meta_page_id == INVALID_PAGE_ID) {
-          LOG(ERROR) << "CatalogManager: CreateIndex Failed - Failed to allocate page for index metadata for '" << index_name << "'.";
-          next_index_id_.fetch_sub(1); // Rollback
-          return DB_FAILED;
-      }
+    if (index_meta_page == nullptr || meta_page_id == INVALID_PAGE_ID) {
+        LOG(ERROR) << "CatalogManager: CreateIndex Failed - Failed to allocate page for index metadata for '" << index_name << "'.";
+        next_index_id_.fetch_sub(1); // Rollback
+        return DB_FAILED;
+    }
 
-      try {
-          IndexMetadata *index_meta = IndexMetadata::Create(new_index_id, index_name, table_info->GetTableId(), key_map);
-          if (!index_meta) {
-              throw std::runtime_error("IndexMetadata::Create failed to create index_meta.");
-          }
+    try {
+        IndexMetadata *index_meta = IndexMetadata::Create(new_index_id, index_name, table_info->GetTableId(), key_map);
+        if (!index_meta) {
+            throw std::runtime_error("IndexMetadata::Create failed to create index_meta.");
+        }
 
-          IndexInfo *new_index_info = IndexInfo::Create();
-          new_index_info->Init(index_meta, table_info, buffer_pool_manager_);
+        IndexInfo *new_index_info = IndexInfo::Create();
+        new_index_info->Init(index_meta, table_info, buffer_pool_manager_);
 
-          
-          index_meta->SerializeTo(index_meta_page->GetData());
-          buffer_pool_manager_->UnpinPage(meta_page_id, true); 
-          
-          catalog_meta_->GetIndexMetaPages()->emplace(new_index_id, meta_page_id);
-          index_names_[table_name][index_name] = new_index_id;
-          indexes_[new_index_id] = new_index_info;
+        
+        index_meta->SerializeTo(index_meta_page->GetData());
+        buffer_pool_manager_->UnpinPage(meta_page_id, true); 
+        
+        catalog_meta_->GetIndexMetaPages()->emplace(new_index_id, meta_page_id);
+        index_names_[table_name][index_name] = new_index_id;
+        indexes_[new_index_id] = new_index_info;
 
-          if (FlushCatalogMetaPage() != DB_SUCCESS) {
-              throw std::runtime_error("Failed to flush catalog meta page after index creation.");
-          }
+        if (FlushCatalogMetaPage() != DB_SUCCESS) {
+            throw std::runtime_error("Failed to flush catalog meta page after index creation.");
+        }
 
-          index_info = new_index_info;
-          LOG(INFO) << "CatalogManager: Index '" << index_name << "', id = " << new_index_id << " created.";
-          return DB_SUCCESS;
-      } catch (const std::exception &e) {
-          LOG(ERROR) << "CatalogManager: CreateIndex for '" <<index_name << "' failed: " << e.what();
+        index_info = new_index_info;
+        LOG(INFO) << "CatalogManager: Index '" << index_name << "', id = " << new_index_id << " created.";
+        return DB_SUCCESS;
+    } catch (const std::exception &e) {
+        LOG(ERROR) << "CatalogManager: CreateIndex for '" <<index_name << "' failed: " << e.what();
 
-          // Rollback
-          next_index_id_.fetch_sub(1);
+        // Rollback
+        next_index_id_.fetch_sub(1);
 
-          if (catalog_meta_ && catalog_meta_->index_meta_pages_.count(new_index_id)) {
-              catalog_meta_->index_meta_pages_.erase(new_index_id);
-          }
-          auto it_tn = index_names_.find(table_name);
-          if (it_tn != index_names_.end()) {
-              it_tn->second.erase(index_name);
-              if (it_tn->second.empty()) { index_names_.erase(it_tn); }
-          }
-          if (indexes_.count(new_index_id)) {
-              indexes_.erase(new_index_id);
-          }
-          if (meta_page_id != INVALID_PAGE_ID) {
-              buffer_pool_manager_->DeletePage(meta_page_id);
-          }
-          index_info = nullptr;
-          return DB_FAILED;
-      }
-
-      
+        if (catalog_meta_ && catalog_meta_->index_meta_pages_.count(new_index_id)) {
+            catalog_meta_->index_meta_pages_.erase(new_index_id);
+        }
+        auto it_tn = index_names_.find(table_name);
+        if (it_tn != index_names_.end()) {
+            it_tn->second.erase(index_name);
+            if (it_tn->second.empty()) { index_names_.erase(it_tn); }
+        }
+        if (indexes_.count(new_index_id)) {
+            indexes_.erase(new_index_id);
+        }
+        if (meta_page_id != INVALID_PAGE_ID) {
+            buffer_pool_manager_->DeletePage(meta_page_id);
+        }
+        index_info = nullptr;
+        return DB_FAILED;
+    } 
 }
 
 /**
@@ -327,16 +325,47 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
  */
 dberr_t CatalogManager::GetIndex(const std::string &table_name, const std::string &index_name,
                                  IndexInfo *&index_info) const {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    auto it_table_map = index_names_.find(table_name);
+    if (it_table_map == index_names_.end()) { return DB_TABLE_NOT_EXIST; }
+    auto it_index_entry = it_table_map->second.find(index_name);
+    if (it_index_entry == it_table_map->second.end()) { return DB_INDEX_NOT_FOUND; }
+    
+    index_id_t id = it_index_entry->second;
+    auto it_index = indexes_.find(id);
+    if (it_index == indexes_.end()) {
+        LOG(ERROR) << "CatalogManager: GetIndex - Index ID " << id << " for '" << index_name << "' on table '" << table_name << "' not found.";
+        return DB_FAILED;
+    }
+    index_info = it_index->second;
+    return DB_SUCCESS;
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::GetTableIndexes(const std::string &table_name, std::vector<IndexInfo *> &indexes) const {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    TableInfo *table_info;
+    indexes.clear();
+    if (GetTable(table_name, table_info) != DB_SUCCESS) { return DB_TABLE_NOT_EXIST; }
+
+    auto it_table_entry = index_names_.find(table_name);
+    if (it_table_entry != index_names_.end()) {
+        const std::unordered_map<std::string, index_id_t> &table_s_indexes_map = it_table_entry->second;
+
+        for (const auto &pair : table_s_indexes_map ) {
+            // pair.first: index_name
+            // pair.second: index_id
+            index_id_t cur_index_id = pair.second;
+            auto it_index = indexes_.find(cur_index_id);
+            if (it_index == indexes_.end()) {
+                indexes.push_back(it_index->second);
+            } else {
+                LOG(ERROR) << "CatalogManager: GetTableIndexs - Index ID " << cur_index_id << " for '" << pair.first << "' on table '" << table_name << "' not found.";
+            }
+        }
+    }
+
+    return DB_SUCCESS;
 }
 
 /**
