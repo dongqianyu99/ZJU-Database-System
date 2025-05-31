@@ -372,16 +372,109 @@ dberr_t CatalogManager::GetTableIndexes(const std::string &table_name, std::vect
  * TODO: Student Implement
  */
 dberr_t CatalogManager::DropTable(const string &table_name) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    LOG(INFO) << "CatalogManager: Attempting to drop table '" << table_name << "'.";
+
+    TableInfo *table_info;
+    if (GetTable(table_name, table_info) != DB_SUCCESS) {
+        return DB_TABLE_NOT_EXIST;
+    }
+    table_id_t table_id = table_info->GetTableId();
+
+    // Drop all indexes associated
+    std::vector<std::string> index_names_on_table;
+    auto it_indexes = index_names_.find(table_name);
+    if (it_indexes != index_names_.end()) {
+        for (const auto &index_entry : it_indexes->second) {
+            index_names_on_table.push_back(index_entry.first);
+        }
+    }
+    for (const std::string &index_name : index_names_on_table) {
+        if (DropIndex(table_name, index_name) != DB_SUCCESS) {
+            LOG(ERROR) << "CatalogManager: Failed to drop index '" << index_name << "'.";
+            return DB_FAILED;
+        }
+    }
+
+    // Get TableMetadata page id
+    if (!catalog_meta_->table_meta_pages_.count(table_id)) {
+        LOG(ERROR) << "CatalogManager: DropTable - Table ID " << table_id << " not found in catalog_meta.";
+        return DB_FAILED;
+    }
+    page_id_t table_meta_page_id = catalog_meta_->table_meta_pages_.at(table_id);
+
+    // Remove from maps
+    table_names_.erase(table_name);
+    tables_.erase(table_id);
+
+    // Update CatalogMeta
+    catalog_meta_->table_meta_pages_.erase(table_id);
+
+    // Delete the physical page for table metadata
+    buffer_pool_manager_->DeletePage(table_meta_page_id);
+
+    // Flush CatalogMetaPage
+    if (FlushCatalogMetaPage() != DB_SUCCESS) {
+        throw std::runtime_error("Failed to flush catalog meta page after droping table.");
+    }
+
+    LOG(INFO) << "CatalogManager: Table '" << table_name << "' dropped successfully.";
+    return DB_SUCCESS;
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_name) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    LOG(INFO) << "CatalogManager: Attempting to drop index '" << index_name << "' from table '" << table_name <<"'.";
+
+    TableInfo *table_info;
+    if (GetTable(table_name, table_info) != DB_SUCCESS) {
+        return DB_TABLE_NOT_EXIST;
+    }
+
+    auto it_indexs = index_names_.find(table_name);
+    if (it_indexs == index_names_.end()) { return DB_TABLE_NOT_EXIST; }
+    if (!it_indexs->second.count(index_name)) { return DB_INDEX_NOT_FOUND; }
+    index_id_t index_id = it_indexs->second.at(index_name);
+
+    auto it_index_info = indexes_.find(index_id);
+    if (it_index_info == indexes_.end()) {
+        LOG(ERROR) << "CatalogManager: DropIndex - Index ID " << index_id << " not found.";
+        it_indexs->second.erase(index_name);
+        if (it_indexs->second.empty()) {
+            index_names_.erase(it_indexs);
+            return DB_INDEX_NOT_FOUND;
+        }
+        IndexInfo *index_info = it_index_info->second;
+    }
+
+    // Get IndexMetadata page id
+    if (!catalog_meta_->index_meta_pages_.count(index_id)) {
+        LOG(ERROR) << "CatalogManager: DropIndex - Index ID " << index_id << "not in catalog_meta.";
+        return DB_FAILED;
+    }
+    page_id_t index_meta_page_id = catalog_meta_->index_meta_pages_.at(index_id);
+
+    // Remove from internal maps
+    it_indexs->second.erase(index_name);
+    if (it_indexs->second.empty()) {
+        index_names_.erase(it_indexs);
+    }
+    indexes_.erase(index_id);
+
+    // Update CatalogMeta
+    catalog_meta_->index_meta_pages_.erase(index_id);
+
+    // Delete the physical page for index metadate
+    buffer_pool_manager_->DeletePage(index_meta_page_id);
+
+    // Flush
+    if (FlushCatalogMetaPage() != DB_SUCCESS) {
+        throw std::runtime_error("Failed to flush catalog meta page after droping index.");
+    }
+
+    LOG(ERROR) << "CatalogManager: Index '" << index_name << "' dropped successfully.";
+    return DB_SUCCESS;
 }
 
 /**
