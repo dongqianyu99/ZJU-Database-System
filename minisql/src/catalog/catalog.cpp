@@ -146,18 +146,34 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
         return DB_FAILED;
     }
 
+    TableHeap *table_heap = nullptr;
+    TableMetadata *table_meta = nullptr;
+    TableInfo *new_table_info = nullptr;
+    TableSchema *schema_copy = nullptr;
+
     try {
-        TableMetadata *table_meta = TableMetadata::Create(new_table_id, table_name, INVALID_PAGE_ID, schema);
-        if (!table_meta) {
-            throw std::runtime_error("TableMetadata::Create failed to create table_meta.");
+        schema_copy = new TableSchema(*schema);
+        
+        // Create TableHeap using the schema_copy
+        table_heap = TableHeap::Create(buffer_pool_manager_, schema_copy, txn, log_manager_, lock_manager_);
+
+        page_id_t heap_root_page_id = table_heap->GetFirstPageId();
+        if (heap_root_page_id == INVALID_PAGE_ID) { 
+            throw std::runtime_error("CatalogManager: Creat table - Invalid root page ID.");
         }
 
+        // Create TableMetadata
+        table_meta = TableMetadata::Create(new_table_id, table_name, heap_root_page_id, schema_copy);
+
+        // Serialize TableMetadatat to its page
         table_meta->SerializeTo(table_meta_page->GetData());
         buffer_pool_manager_->UnpinPage(meta_page_id, true);
 
+        // Create and Init TableInfo
         TableInfo *new_table_info = TableInfo::Create();
-        new_table_info->Init(table_meta, nullptr);
+        new_table_info->Init(table_meta, table_heap);
 
+        // Update CatalogManager
         catalog_meta_->GetTableMetaPages()->emplace(new_table_id, meta_page_id);
         table_names_[table_name] = new_table_id;
         tables_[new_table_id] = new_table_info;
@@ -175,6 +191,7 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
         LOG(ERROR) << "CatalogManager: Creat table '" << table_name << "' failed." << e.what();
 
         // Rollback
+        // Not fully completed in logics!
         next_table_id_.fetch_sub(1);
 
         if (catalog_meta_ && catalog_meta_->GetTableMetaPages()->count(new_table_id)) {
@@ -187,6 +204,7 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
             tables_.erase(new_table_id);
         }
         if (meta_page_id != INVALID_PAGE_ID) {
+            if (table_meta_page != nullptr) { buffer_pool_manager_->UnpinPage(meta_page_id, false); }
             buffer_pool_manager_->DeletePage(meta_page_id);
         }
         table_info = nullptr;
@@ -508,6 +526,7 @@ dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t pag
 
     TableMetadata *table_meta = nullptr;
     TableInfo *table_info = nullptr;
+    TableHeap *table_heap = nullptr;
     try {
         TableMetadata::DeserializeFrom(table_meta_page->GetData(), table_meta);
         buffer_pool_manager_->UnpinPage(page_id, true);
@@ -517,8 +536,11 @@ dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t pag
             return DB_FAILED;
         } 
 
+        page_id_t heap_root_page_id = table_meta->GetFirstPageId();
+        table_heap = TableHeap::Create(buffer_pool_manager_, heap_root_page_id, table_meta->GetSchema(), log_manager_, lock_manager_);
+
         table_info = TableInfo::Create();
-        table_info->Init(table_meta, nullptr);
+        table_info->Init(table_meta, table_heap);
         table_meta = nullptr;
 
         table_names_[table_info->GetTableName()] = table_id;
