@@ -78,7 +78,7 @@ class CatalogManager {
 
   dberr_t CreateTable(const std::string &table_name, TableSchema *schema, Txn *txn, TableInfo *&table_info);
 
-  dberr_t GetTable(const std::string &table_name, TableInfo *&table_info);
+  dberr_t GetTable(const std::string &table_name, TableInfo *&table_info) const;
 
   dberr_t GetTables(std::vector<TableInfo *> &tables) const;
 
@@ -103,7 +103,7 @@ class CatalogManager {
 
   dberr_t LoadIndex(const index_id_t index_id, const page_id_t page_id);
 
-  dberr_t GetTable(const table_id_t table_id, TableInfo *&table_info);
+  dberr_t GetTable(const table_id_t table_id, TableInfo *&table_info) const;
 
  private:
   [[maybe_unused]] BufferPoolManager *buffer_pool_manager_;

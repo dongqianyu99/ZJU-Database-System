@@ -197,7 +197,7 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
 /**
  * TODO: Student Implement
  */
-dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_info) {
+dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_info) const {
     auto it_name = table_names_.find(table_name);
     if (it_name == table_names_.end()) {
         return DB_TABLE_NOT_EXIST;
@@ -205,7 +205,7 @@ dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_inf
     return GetTable(it_name->second, table_info);
 }
 
-dberr_t CatalogManager::GetTable(const table_id_t table_id, TableInfo *&table_info) {
+dberr_t CatalogManager::GetTable(const table_id_t table_id, TableInfo *&table_info) const {
     auto it_table = tables_.find(table_id);
     if (it_table == tables_.end()) {
         return DB_TABLE_NOT_EXIST;
