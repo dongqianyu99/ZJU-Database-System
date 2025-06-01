@@ -64,10 +64,22 @@ class IndexInfo {
  * TODO: Student Implement
  */
   void Init(IndexMetadata *meta_data, TableInfo *table_info, BufferPoolManager *buffer_pool_manager) {
-    // Step1: init index metadata and table info
-    // Step2: mapping index key to key schema
-    // Step3: call CreateIndex to create the index
-    ASSERT(false, "Not Implemented yet.");
+      // Step1: init index metadata and table info
+      meta_data_ = meta_data;
+      
+      // Step2: mapping index key to key schema
+      const Schema *table_full_schema = table_info->GetSchema();
+      const std::vector<uint32_t>& key_column_indices = meta_data->GetKeyMapping();
+      key_schema_ = Schema::ShallowCopySchema(table_full_schema, key_column_indices);
+
+      // Step3: call CreateIndex to create the index
+      std::string index_type = "bptree";
+      index_ = CreateIndex(buffer_pool_manager, index_type);
+      if (index_ == nullptr) {
+          LOG(FATAL) << "IndexInfo::Init: Failed to create bptree for index '" << meta_data_->GetIndexName() << "'.";
+      }
+
+      LOG(INFO) << "IndexInfo::Init: Successfully initialized index '" << meta_data->GetIndexName() << "'.";
   }
 
   inline Index *GetIndex() { return index_; }
