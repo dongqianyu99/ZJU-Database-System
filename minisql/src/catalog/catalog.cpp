@@ -481,22 +481,98 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
  * TODO: Student Implement
  */
 dberr_t CatalogManager::FlushCatalogMetaPage() const {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    if (catalog_meta_ == nullptr) { 
+        LOG(ERROR) << "CatalogManager: FlushCatalogMetaPage failed - calog_meta_ is null.";
+        return DB_FAILED;
+    }
+    Page *meta_page = buffer_pool_manager_->FetchPage(CATALOG_META_PAGE_ID);
+    if (meta_page == nullptr) {
+        LOG(ERROR) << "Failed to fetch catalog meta page for flushing.";
+        return DB_FAILED;
+    }
+
+    catalog_meta_->SerializeTo(meta_page->GetData());
+    buffer_pool_manager_->UnpinPage(CATALOG_META_PAGE_ID, true);
+
+    LOG(INFO) << "CatalogManager: Catalog meta page flushed.";
+    return DB_SUCCESS;
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t page_id) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    LOG(INFO) << "CatalogManager: Loading table_id " << table_id << " from " << page_id;
+    Page *table_meta_page = buffer_pool_manager_->FetchPage(page_id);
+    if (table_meta_page == nullptr) { return DB_FAILED; }
+
+    TableMetadata *table_meta = nullptr;
+    TableInfo *table_info = nullptr;
+    try {
+        TableMetadata::DeserializeFrom(table_meta_page->GetData(), table_meta);
+        buffer_pool_manager_->UnpinPage(page_id, true);
+        if (table_meta == nullptr) { return DB_FAILED; }
+        if (table_meta->GetTableId() != table_id) {
+            LOG(ERROR) << "Table ID mismatch on load.";
+            return DB_FAILED;
+        } 
+
+        table_info = TableInfo::Create();
+        table_info->Init(table_meta, nullptr);
+        table_meta = nullptr;
+
+        table_names_[table_info->GetTableName()] = table_id;
+        tables_[table_id] = table_info;
+
+        LOG(ERROR) << "CatalogManager: Loaded table '" << table_info->GetTableName() << "'.";
+        return DB_SUCCESS;
+    } catch (const std::exception &e) {
+        LOG(ERROR) << "Exception during table loading: " << e.what();
+        if (table_meta_page != nullptr) {
+            buffer_pool_manager_->UnpinPage(page_id, false);
+            return DB_FAILED;
+        }
+    }
 }
 
 /**
  * TODO: Student Implement
  */
 dberr_t CatalogManager::LoadIndex(const index_id_t index_id, const page_id_t page_id) {
-  // ASSERT(false, "Not Implemented yet");
-  return DB_FAILED;
+    LOG(INFO) << "CatalogManager: Loading index_id " << index_id << " from " << page_id;
+    Page *index_meta_page = buffer_pool_manager_->FetchPage(page_id);
+    if (index_meta_page == nullptr) { return DB_FAILED; }
+
+    IndexMetadata *index_meta = nullptr;
+    IndexInfo *index_info = nullptr;
+    TableInfo *table_info = nullptr;
+    try {
+        IndexMetadata::DeserializeFrom(index_meta_page->GetData(), index_meta);
+        buffer_pool_manager_->UnpinPage(page_id, false);
+        if (index_meta == nullptr) { return DB_FAILED; }
+        if (index_meta->GetIndexId() != index_id) {
+            LOG(ERROR) << "Index ID mismatch on load.";
+            return DB_FAILED;
+        }
+        
+        if (GetTable(index_meta->GetTableId(), table_info) != DB_SUCCESS) {
+            LOG(ERROR) << "Table_id " << index_meta->GetTableId() << " for index " << index_id << " not found.";
+            return DB_TABLE_NOT_EXIST;
+        }
+
+        index_info = IndexInfo::Create();
+        index_info->Init(index_meta, table_info, buffer_pool_manager_);
+        
+        indexes_[index_id] = index_info;
+        index_names_[table_info->GetTableName()][index_info->GetIndexName()] = index_id;
+        
+        LOG(INFO) << "CatalogManager: Loaded index '" << index_info->GetIndexName() << "'.";
+        return DB_SUCCESS;
+    } catch (const std::exception &e) {
+        LOG(ERROR) << "Exception during index loading: " << e.what();
+        if (index_meta_page != nullptr) {
+            buffer_pool_manager_->UnpinPage(page_id, false);
+            return DB_FAILED;
+        }
+    }
 }
