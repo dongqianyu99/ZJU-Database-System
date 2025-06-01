@@ -23,6 +23,18 @@ class Schema {
     }
   }
 
+  // Copy ctor
+  Schema(const Schema &other) : is_manage_(true) {
+      columns_.reserve(other.columns_.size());
+      for (const Column* col_in_other : other.columns_) {
+          if (col_in_other) {
+              columns_.push_back(new Column(col_in_other));
+          } else {
+              columns_.push_back(nullptr);
+          }
+      }
+  }
+
   inline const std::vector<Column *> &GetColumns() const { return columns_; }
 
   inline const Column *GetColumn(const uint32_t column_index) const { return columns_[column_index]; }

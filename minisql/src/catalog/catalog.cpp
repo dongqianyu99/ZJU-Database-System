@@ -271,6 +271,7 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
         uint32_t col_index;
         if (table_schema->GetColumnIndex(key_col_name, col_index) != DB_SUCCESS) {
             LOG(ERROR) << "CatalogManager: CreateIndex Failed - Column '" << key_col_name << "' not found.";
+            return DB_COLUMN_NAME_NOT_EXIST;
         }
         key_map.push_back(col_index);
     }
