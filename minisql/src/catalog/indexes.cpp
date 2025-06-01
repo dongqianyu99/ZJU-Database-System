@@ -49,7 +49,7 @@ uint32_t IndexMetadata::GetSerializedSize() const {
            MACH_STR_SERIALIZED_SIZE(index_name_) + // index_name_
            sizeof(table_id_t) + // table_id_
            sizeof(uint32_t) + // key count
-           key_map_.size() + sizeof(uint32_t); // key_map_ data
+           key_map_.size() * sizeof(uint32_t); // key_map_ data
 }
 
 uint32_t IndexMetadata::DeserializeFrom(char *buf, IndexMetadata *&index_meta) {
