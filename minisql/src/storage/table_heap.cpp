@@ -95,15 +95,17 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
     auto oldPage = reinterpret_cast<TablePage *>(old_Page);
 
     // TablePage::UpdateTuple requires a old_row.
-    Row *old_row;
+    // Row *old_row;
+    Row old_row; // To avoid wild pointer!
+    old_row.SetRowId(rid); // IMPORTANT!
     oldPage->WLatch();
-    if (!(oldPage->GetTuple(old_row, schema_, txn, lock_manager_))) {
+    if (!(oldPage->GetTuple(&old_row, schema_, txn, lock_manager_))) {
         // throw std::runtime_error("Can't get tuple from the old page!");
         old_Page->WUnlatch();
         return false;
     }
     // Update the tuple.
-    bool isUpdated = oldPage->UpdateTuple(row, old_row, schema_, txn, lock_manager_, log_manager_);
+    bool isUpdated = oldPage->UpdateTuple(row, &old_row, schema_, txn, lock_manager_, log_manager_);
     oldPage->WUnlatch();
     if (!isUpdated) { // New row is too large to be updated. Remove the old row and insert the new row again.
         MarkDelete(rid, txn);
@@ -203,37 +205,42 @@ TableIterator TableHeap::End() {
 /**
  * Get next valid row id.
  */
-RowId TableHeap::GetNextRowId(RowId rid, Txn *txn) {
-    RowId next_rid;
-    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
-    if (page == nullptr)
-        return INVALID_ROWID;
 
-    // Search from this page.
-    bool isFound = false;
-    page->RLatch();
-    isFound = page->GetNextTupleRid(rid, &next_rid);
-    page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-    if (isFound) {
-        return next_rid;
-    }
+/**
+ * Some fatal problems in TableHeap::GetNextRowId()!
+ */
 
-    // Search from the others.
-    auto next_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(page->GetNextPageId()));
-    if (next_page == nullptr)
-        return INVALID_ROWID;
-    while (!isFound) {
-        next_page->RLatch();
-        isFound = next_page->GetFirstTupleRid(&next_rid);
-        next_page->RUnlatch();
-        buffer_pool_manager_->UnpinPage(next_page->GetPageId(), false);
-        if (isFound) { return next_rid; } // Found in this page.
-        // Countinue.
-        next_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page->GetNextPageId()));
-        if (next_page == nullptr) // Reach the end().
-            return INVALID_ROWID;        
-    }
+// RowId TableHeap::GetNextRowId(RowId rid, Txn *txn) {
+//     RowId next_rid;
+//     auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
+//     if (page == nullptr)
+//         return INVALID_ROWID;
 
-    throw std::runtime_error("Can't get a proper next id!");
-}
+//     // Search from this page.
+//     bool isFound = false;
+//     page->RLatch();
+//     isFound = page->GetNextTupleRid(rid, &next_rid);
+//     page->RUnlatch();
+//     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+//     if (isFound) {
+//         return next_rid;
+//     }
+
+//     // Search from the others.
+//     auto next_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(page->GetNextPageId()));
+//     if (next_page == nullptr)
+//         return INVALID_ROWID;
+//     while (!isFound) {
+//         next_page->RLatch();
+//         isFound = next_page->GetFirstTupleRid(&next_rid);
+//         next_page->RUnlatch();
+//         buffer_pool_manager_->UnpinPage(next_page->GetPageId(), false);
+//         if (isFound) { return next_rid; } // Found in this page.
+//         // Countinue.
+//         next_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(next_page->GetNextPageId()));
+//         if (next_page == nullptr) // Reach the end().
+//             return INVALID_ROWID;        
+//     }
+
+//     throw std::runtime_error("Can't get a proper next id!");
+// }
