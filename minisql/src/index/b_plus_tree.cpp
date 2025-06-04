@@ -575,10 +575,19 @@ IndexIterator BPlusTree::Begin() {
  */
 IndexIterator BPlusTree::Begin(const GenericKey *key) {
     if (IsEmpty()) { return End(); }
-    Page *leaf_page = FindLeafPage(key, root_page_id_, true);
+    Page *leaf_page = FindLeafPage(key, root_page_id_, false);
     if (leaf_page == nullptr) { return End(); }
     auto *leaf_node = reinterpret_cast<LeafPage *>(leaf_page->GetData());
     int key_index = leaf_node->KeyIndex(key, processor_);
+
+    // LeafPage::KeyIndex() returns GetSize() when key is larger then every one in the page
+    // When key_index == GetSize(), it should not be used to construct the iterator
+    if (key_index == leaf_node->GetSize()) {
+        if (leaf_node->GetNextPageId() == INVALID_PAGE_ID) {
+            buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), false);
+            return End();
+        }
+    }
 
     // Construct the iterator.
     IndexIterator iter(leaf_page->GetPageId(), buffer_pool_manager_, key_index);
