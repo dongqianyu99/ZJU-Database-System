@@ -494,7 +494,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       }
       parsed_cols.push_back(temp_col_info); // 将解析的列信息添加到列表中
     }
-    else if(current_list_item->type_ == kNodeColumnDefinitionList) { //表级约束
+    else if(current_list_item->type_ == kNodeColumnList) { //表级约束
       if (!pk_cols.empty()) {
         LOG(ERROR) << "Syntax error: Duplicate primary key definition." << std::endl;
         for(auto &col : columns) {
@@ -560,7 +560,6 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       col = new Column(temp_col.name, temp_col.type_id, col_id++, ~is_not_null, is_unique);
     }
     columns_to_create.push_back(col);
-    col_id++;
   }
 
   //创建Schema对象
@@ -925,7 +924,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
       }
       //调用Bison解析器进行语法分析
       int parse_result = yyparse();
-      yy_delete_buffer(buffer); //删除词法分析缓冲区
+      // yy_delete_buffer(buffer); //删除词法分析缓冲区
 
       auto result = Execute(MinisqlGetParserRootNode()); //获取解析结果
       MinisqlParserFinish(); 

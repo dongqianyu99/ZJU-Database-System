@@ -32,7 +32,23 @@ void SeqScanExecutor::TupleTransfer(const Schema *table_schema, const Schema *ou
   std::vector<Field> dest_row;
   dest_row.reserve(output_columns.size());
   for (const auto column : output_columns) {
+    // ASSERT(column != nullptr, "Column in output_columns is null!"); 
     auto idx = column->GetTableInd();
+    
+    // // [DEBUG]
+    // LOG(INFO) << "Output Column: " << column->GetName()
+    //           << ", Table Index (idx): " << idx
+    //           << ", Input Row Field Count: " << row->GetFieldCount();
+
+    // if (idx >= row->GetFieldCount()) {
+    //     LOG(ERROR) << "CRITICAL: idx (" << idx << ") is out of bounds for row with "
+    //                << row->GetFieldCount() << " fields!";
+    // }
+    // Field* field_ptr_from_row = row->GetField(idx);
+    // if (field_ptr_from_row == nullptr) {
+    //     LOG(ERROR) << "CRITICAL: row->GetField(" << idx << ") returned nullptr!";
+    // }
+    
     dest_row.emplace_back(*row->GetField(idx));
   }
   *output_row = Row(dest_row);
@@ -49,6 +65,17 @@ void SeqScanExecutor::Init() {
 bool SeqScanExecutor::Next(Row *row, RowId *rid) {
   auto predicate = plan_->GetPredicate();
   auto table_schema = table_info_->GetSchema();
+
+  // // [DEBUG]
+  // LOG(INFO) << "Table Schema Columns:";
+  // for (const auto& col : table_info_->GetSchema()->GetColumns()) {
+  //     LOG(INFO) << "  Name: " << col->GetName() << ", TableInd: " << col->GetTableInd();
+  // }
+  // LOG(INFO) << "Output Schema Columns:";
+  // for (const auto& col : schema_->GetColumns()) {
+  //     LOG(INFO) << "  Name: " << col->GetName() << ", TableInd: " << col->GetTableInd();
+  // }
+
   while (iterator_ != table_info_->GetTableHeap()->End()) {
     auto p_row = &(*iterator_);
     if (predicate != nullptr) {

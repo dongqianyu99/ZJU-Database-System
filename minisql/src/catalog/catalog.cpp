@@ -376,7 +376,7 @@ dberr_t CatalogManager::GetTableIndexes(const std::string &table_name, std::vect
             // pair.second: index_id
             index_id_t cur_index_id = pair.second;
             auto it_index = indexes_.find(cur_index_id);
-            if (it_index == indexes_.end()) {
+            if (it_index != indexes_.end()) {
                 indexes.push_back(it_index->second);
             } else {
                 LOG(ERROR) << "CatalogManager: GetTableIndexs - Index ID " << cur_index_id << " for '" << pair.first << "' on table '" << table_name << "' not found.";
