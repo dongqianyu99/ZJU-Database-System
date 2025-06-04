@@ -185,21 +185,42 @@ void TableHeap::DeleteTable(page_id_t page_id) {
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::Begin(Txn *txn) {
-    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
-    RowId rid;
-    page->RLatch();
-    page->GetFirstTupleRid(&rid);
-    page->RUnlatch();
-    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
-    return TableIterator(this, rid, txn);
+
+TableIterator TableHeap::Begin(Txn *txn) { // Need to match up with end()!
+    page_id_t current_page_id = first_page_id_;
+    RowId first_valid_rid;
+    bool found_first_tuple = false;
+
+    // Try to find the first valid tuple
+    while (current_page_id != INVALID_PAGE_ID) {
+        Page* page = buffer_pool_manager_->FetchPage(current_page_id);
+        if (page == nullptr) {
+            LOG(ERROR) << "TableHeap::Begin: Failed to fetch page " << current_page_id << ". Aborting scan.";
+            return End(); 
+        }
+        
+        auto table_page = reinterpret_cast<TablePage*>(page->GetData());
+        table_page->RLatch();
+        found_first_tuple = table_page->GetFirstTupleRid(&first_valid_rid);
+        table_page->RUnlatch();
+
+        page_id_t next_page_id = table_page->GetNextPageId(); 
+        buffer_pool_manager_->UnpinPage(current_page_id, false);
+
+        if (found_first_tuple) {
+            return TableIterator(this, first_valid_rid, txn);
+        }
+
+        current_page_id = next_page_id;
+    }
+    return End(); 
 }
 
 /**
  * TODO: Student Implement
  */
 TableIterator TableHeap::End() { 
-    return TableIterator(nullptr, RowId(), nullptr); 
+    return TableIterator(nullptr, RowId(), nullptr);
 }
 
 /**

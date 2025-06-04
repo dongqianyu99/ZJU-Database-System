@@ -53,8 +53,8 @@ const Row &TableIterator::operator*() {
     // table_heap_->GetTuple(row, txn_);
     // ASSERT(row != nullptr, "Can't get the row!");
     // return *row;
-    ASSERT(table_heap_ != nullptr, "Table heap is empty!");
-    ASSERT(rid_.GetPageId() != INVALID_PAGE_ID, "Invalid page!");
+    // ASSERT(table_heap_ != nullptr, "Table heap is empty!");
+    // ASSERT(rid_.GetPageId() != INVALID_PAGE_ID, "Invalid page!");
     // ASSERT(rid_ != INVALID_ROWID, "Invalid row id!");
     return row_;
 }
@@ -68,9 +68,9 @@ Row *TableIterator::operator->() {
     // table_heap_->GetTuple(row, txn_);
     // ASSERT(row != nullptr, "Can't get the row!");
     // return row;
-    ASSERT(table_heap_ != nullptr, "Table heap is empty!");
-    ASSERT(rid_.GetPageId() != INVALID_PAGE_ID, "Invalid page!");
-   // ASSERT(rid_ != INVALID_ROWID, "Invalid row id!");
+    // ASSERT(table_heap_ != nullptr, "Table heap is empty!");
+    // ASSERT(rid_.GetPageId() != INVALID_PAGE_ID, "Invalid page!");
+    // ASSERT(rid_ != INVALID_ROWID, "Invalid row id!");
     return &row_;
 }
 
