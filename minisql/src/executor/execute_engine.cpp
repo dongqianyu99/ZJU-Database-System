@@ -410,7 +410,18 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
         LOG(ERROR) << "Syntax error: Column name cannot be empty." << std::endl;
         return DB_FAILED; // 早期返回：列名为空
       }
+
       temp_col_info.name = current_list_item->child_->val_;
+
+      // Check "UNIQUE" here
+      // TODO: Didn't handle "NOT NULL"
+      if (current_list_item->val_ != nullptr) {
+          string constraint_name = current_list_item->val_;
+          transform(constraint_name.begin(), constraint_name.end(), constraint_name.begin(), ::toupper);// 转换为大写
+          if (constraint_name == "UNIQUE")
+            temp_col_info.is_unique_from_col_def = true; // 列级 UNIQUE
+      }
+
       //获取列类型
       pSyntaxNode type_node = current_list_item->child_->next_;
       if (type_node == nullptr || type_node->type_ != kNodeColumnType) {
@@ -471,8 +482,11 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       }
       //解析列级约束（UNIQUE和NOT NULL）
       pSyntaxNode constraint_node = type_node->next_;
+      // pSyntaxNode constraint_node = current_list_item;
       while (constraint_node != nullptr) {
+        // [WARNING] This might not work properly!
         if(constraint_node->type_ == kNodeIdentifier && constraint_node->val_ != nullptr) {
+        // if(constraint_node->type_ == kNodeColumnDefinition && constraint_node->val_ != nullptr) {
           string constraint_name = constraint_node->val_;
           transform(constraint_name.begin(), constraint_name.end(), constraint_name.begin(), ::toupper);// 转换为大写
           if (constraint_name == "UNIQUE") {
