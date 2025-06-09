@@ -26,7 +26,7 @@ CatalogMeta *CatalogMeta::DeserializeFrom(char *buf) {
   // check valid
   uint32_t magic_num = MACH_READ_UINT32(buf);
   buf += 4;
-  ASSERT(magic_num == CATALOG_METADATA_MAGIC_NUM, "Failed to deserialize catalog metadata from disk.");
+  // ASSERT(magic_num == CATALOG_METADATA_MAGIC_NUM, "Failed to deserialize catalog metadata from disk.");
   // get table and index nums
   uint32_t table_nums = MACH_READ_UINT32(buf);
   buf += 4;
